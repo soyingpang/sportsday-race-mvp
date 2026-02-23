@@ -234,6 +234,7 @@ function renderHeatsOverview(pMap){
     btn.addEventListener('click', ()=>{
       state.ui.currentHeatId = btn.dataset.id;
       saveState(state);
+      renderHeats();
     });
   });
 }
@@ -299,6 +300,7 @@ function renderHeats(){
       if(act === 'setCurrent'){
         state.ui.currentHeatId = id;
         saveState(state);
+        renderHeats();
         return;
       }
       if(act === 'export'){
@@ -308,6 +310,7 @@ function renderHeats(){
       if(act === 'toggleLock'){
         state.heats[idx].locked = !state.heats[idx].locked;
         saveState(state);
+        renderHeats();
         return;
       }
       if(act === 'reseed'){
@@ -320,12 +323,14 @@ function renderHeats(){
           fillStrategy: h.fillStrategy
         });
         saveState(state);
+        renderHeats();
         return;
       }
       if(act === 'del'){
         state.heats.splice(idx,1);
         if(state.ui.currentHeatId === id) state.ui.currentHeatId = null;
         saveState(state);
+        renderHeats();
       }
     });
   });
