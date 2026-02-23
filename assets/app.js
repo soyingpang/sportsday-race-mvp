@@ -1,5 +1,6 @@
 import { loadState, saveState, resetState, bc } from './store.js';
 import { parseCsv, gradeOfClass, laneAssign, makeHeatId } from './logic.js';
+import { exportScoreSheet } from './export.js';
 
 let state = loadState();
 
@@ -41,6 +42,16 @@ function renderClassOptions(){
   renderPickers();
 }
 
+function renderBulkControls(grp){
+  return `
+    <div class="row" style="margin:6px 0 8px 0">
+      <button type="button" data-bulk="${grp}" data-act="all">全選</button>
+      <button type="button" data-bulk="${grp}" data-act="none">全不選</button>
+      <button type="button" data-bulk="${grp}" data-act="top2">取前2位</button>
+      <span class="muted" data-count="${grp}"></span>
+    </div>`;
+}
+
 function renderPickers(){
   const classA = selClassA.value;
   const classB = selClassB.value;
@@ -53,23 +64,41 @@ function renderPickers(){
       <input type="checkbox" data-grp="${grp}" value="${p.id}" />
       <span>${p.no}. ${p.name}</span>
     </label>`;
-  pickA.innerHTML = listA.map(p=>mk(p,'A')).join('') || '<div class="muted">（無資料）</div>';
-  pickB.innerHTML = listB.map(p=>mk(p,'B')).join('') || '<div class="muted">（無資料）</div>';
+  pickA.innerHTML = (listA.length ? (renderBulkControls('A') + listA.map(p=>mk(p,'A')).join('')) : '<div class="muted">（無資料）</div>');
+  pickB.innerHTML = (listB.length ? (renderBulkControls('B') + listB.map(p=>mk(p,'B')).join('')) : '<div class="muted">（無資料）</div>');
+  // 批次選取 + 勾選數提示（允許超過 2；建立組次時只取前 2 位）
+  function updateCount(root, grp){
+    const checked = root.querySelectorAll('input[type=checkbox]:checked').length;
+    const node = root.querySelector(`[data-count="${grp}"]`);
+    if(node){
+      node.textContent = `已選 ${checked} 位（建立組次只取前2位）`;
+    }
+  }
 
-  // limit to 2 selections per group
-  for(const root of [pickA, pickB]){
-    root.addEventListener('change', (e)=>{
+  [pickA, pickB].forEach(root=>{
+    // bulk buttons
+    root.addEventListener('click', e=>{
+      const btn = e.target.closest('button[data-bulk]');
+      if(!btn) return;
+      const grp = btn.dataset.bulk;
+      const act = btn.dataset.act;
+      const boxes = root.querySelectorAll('input[type=checkbox]');
+      if(act === 'all') boxes.forEach(b=>b.checked = true);
+      if(act === 'none') boxes.forEach(b=>b.checked = false);
+      if(act === 'top2') boxes.forEach((b,i)=>b.checked = i < 2);
+      updateCount(root, grp);
+    });
+
+    // checkbox count
+    root.addEventListener('change', e=>{
       const grp = e.target?.dataset?.grp;
       if(!grp) return;
-      const checked = root.querySelectorAll('input[type=checkbox]:checked');
-      if(checked.length > 2){
-        e.target.checked = false;
-        setMsg(createMsg, '每班最多選 2 位。');
-      }else{
-        setMsg(createMsg, '');
-      }
-    }, {once:true});
-  }
+      updateCount(root, grp);
+    });
+  });
+
+  updateCount(pickA, 'A');
+  updateCount(pickB, 'B');
 }
 
 function renderParticipantsSummary(){
@@ -127,6 +156,7 @@ function renderHeats(){
             </div>
             <div class="row">
               <button data-act="setCurrent" data-id="${h.id}">設為目前組次</button>
+              <button data-act="export" data-id="${h.id}">匯出計分表</button>
               <button data-act="toggleLock" data-id="${h.id}">${h.locked?'解鎖':'鎖定'}</button>
               <button data-act="reseed" data-id="${h.id}" ${h.locked?'disabled':''}>重排</button>
               <button data-act="del" data-id="${h.id}" class="danger">刪除</button>
@@ -148,6 +178,10 @@ function renderHeats(){
       if(act === 'setCurrent'){
         state.ui.currentHeatId = id;
         saveState(state);
+        return;
+      }
+      if(act === 'export'){
+        exportScoreSheet(state.heats[idx], state.participants);
         return;
       }
       if(act === 'toggleLock'){
@@ -241,11 +275,12 @@ document.getElementById('btnCreateHeat')?.addEventListener('click', ()=>{
     return;
   }
 
-  const pickedA = Array.from(pickA.querySelectorAll('input[type=checkbox]:checked')).map(x=>x.value);
-  const pickedB = Array.from(pickB.querySelectorAll('input[type=checkbox]:checked')).map(x=>x.value);
-  if(pickedA.length>2 || pickedB.length>2){
-    setMsg(createMsg, '每班最多選 2 位。');
-    return;
+  const pickedAAll = Array.from(pickA.querySelectorAll('input[type=checkbox]:checked')).map(x=>x.value);
+  const pickedBAll = Array.from(pickB.querySelectorAll('input[type=checkbox]:checked')).map(x=>x.value);
+  const pickedA = pickedAAll.slice(0,2);
+  const pickedB = pickedBAll.slice(0,2);
+  if(pickedAAll.length>2 || pickedBAll.length>2){
+    setMsg(createMsg, '已選超過 2 位：建立組次將自動取各班前 2 位。');
   }
   if(pickedA.length + pickedB.length === 0){
     setMsg(createMsg, '至少要選 1 位參賽者。');
