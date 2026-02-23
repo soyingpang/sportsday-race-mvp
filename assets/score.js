@@ -3,6 +3,14 @@ import { computeLeaderboard, gradeOfClass, normalizeTimeInput } from './logic.js
 
 let state = loadState();
 
+// === diagnostics ===
+const diagEl = document.getElementById('diag');
+function diag(t){ if(diagEl) diagEl.textContent = t || ''; }
+window.addEventListener('error', (e)=>diag('⚠️ 系統錯誤：'+(e?.message||e)));
+window.addEventListener('unhandledrejection', (e)=>diag('⚠️ 系統錯誤：'+(e?.reason?.message||e?.reason||e)));
+diag('✅ 計分頁已載入（JS OK）');
+
+
 const el = (id)=>document.getElementById(id);
 const selGrade = el('selGrade');
 const inpEvent = el('inpEvent');

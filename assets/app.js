@@ -3,6 +3,20 @@ import { exportTotalScoreSheet, exportHeatScoreSheet } from './export.js';
 import { parseCsv, gradeOfClass, laneAssign, makeHeatId } from './logic.js';
 let state = loadState();
 
+// === diagnostics ===
+const diagEl = document.getElementById('diag');
+function diag(text){
+  if(diagEl) diagEl.textContent = text || '';
+}
+window.addEventListener('error', (e)=>{
+  diag('⚠️ 系統錯誤：' + (e?.message || e));
+});
+window.addEventListener('unhandledrejection', (e)=>{
+  diag('⚠️ 系統錯誤：' + (e?.reason?.message || e?.reason || e));
+});
+diag('✅ 系統已載入（JS OK）');
+
+
 const el = (id)=>document.getElementById(id);
 const fileCsv = el('fileCsv');
 const importMsg = el('importMsg');
@@ -450,9 +464,9 @@ bc.onmessage = (ev)=>{
   }
 };
 
-selGrade.addEventListener('change', renderClassOptions);
-selClassA.addEventListener('change', renderPickers);
-selClassB.addEventListener('change', renderPickers);
+selGrade?.addEventListener('change', renderClassOptions);
+selClassA?.addEventListener('change', renderPickers);
+selClassB?.addEventListener('change', renderPickers);
 
 function renderAll(){
   renderParticipantsSummary();
