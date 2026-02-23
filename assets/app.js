@@ -17,6 +17,8 @@ const inpHeatNo = el('inpHeatNo');
 const pickA = el('pickA');
 const pickB = el('pickB');
 const selFill = el('selFill');
+const chkAutoHeats = el('chkAutoHeats');
+const btnAutoHeats = el('btnAutoHeats');
 const createMsg = el('createMsg');
 const heatsList = el('heatsList');
 const heatsOverview = el('heatsOverview');
@@ -317,6 +319,15 @@ document.getElementById('btnReset')?.addEventListener('click', ()=>{
 
 // === Create heat ===
 document.getElementById('btnCreateHeat')?.addEventListener('click', ()=>{
+  const autoAll = !!chkAutoHeats?.checked;
+  createHeats({all: autoAll});
+});
+
+btnAutoHeats?.addEventListener('click', ()=>{
+  createHeats({all: true});
+});
+
+function createHeats({all}){
   const grade = selGrade.value;
   const classA = selClassA.value;
   const classB = selClassB.value;
@@ -339,38 +350,73 @@ document.getElementById('btnCreateHeat')?.addEventListener('click', ()=>{
     return;
   }
 
-  const pickedAAll = Array.from(pickA.querySelectorAll('input[type=checkbox]:checked')).map(x=>x.value);
-  const pickedBAll = Array.from(pickB.querySelectorAll('input[type=checkbox]:checked')).map(x=>x.value);
-  const pickedA = pickedAAll.slice(0,2);
-  const pickedB = pickedBAll.slice(0,2);
-  if(pickedAAll.length>2 || pickedBAll.length>2){
-    setMsg(createMsg, '已選超過 2 位：建立組次將自動取各班前 2 位。');
-  }
-  if(pickedA.length + pickedB.length === 0){
-    setMsg(createMsg, '至少要選 1 位參賽者。');
+  const pickedAAllRaw = Array.from(pickA.querySelectorAll('input[type=checkbox]:checked')).map(x=>x.value);
+  const pickedBAllRaw = Array.from(pickB.querySelectorAll('input[type=checkbox]:checked')).map(x=>x.value);
+
+  if(pickedAAllRaw.length + pickedBAllRaw.length === 0){
+    setMsg(createMsg, '請先用「全選 / 取前2位」或自行勾選名單。');
     return;
   }
 
+  // 依座號排序（確保「全選」後分組穩定）
+  const pMap = byId(state.participants);
+  const sortByNo = (ids)=> ids
+    .filter(id=>pMap[id])
+    .slice()
+    .sort((a,b)=>{
+      const pa=pMap[a], pb=pMap[b];
+      return (pa.no - pb.no) || String(pa.name).localeCompare(String(pb.name), 'zh-Hant');
+    });
+
+  const pickedAAll = sortByNo(pickedAAllRaw);
+  const pickedBAll = sortByNo(pickedBAllRaw);
+
   const event = (inpEvent.value || '60m').trim();
   const round = selRound.value;
-  const heatNo = Number(inpHeatNo.value || 1);
+  const startHeatNo = Number(inpHeatNo.value || 1);
 
-  const id = makeHeatId({grade, event, round, heatNo, classA, classB});
-  const lanes = laneAssign({classA, classB, pickedA, pickedB, fillStrategy: selFill.value});
-  state.heats.push({
-    id, grade: String(grade), event, round, heatNo,
-    classA, classB,
-    pickedA, pickedB,
-    fillStrategy: selFill.value,
-    lanes,
-    locked: false,
-    createdAt: Date.now()
-  });
-  if(!state.ui.currentHeatId) state.ui.currentHeatId = id;
+  const chunk2 = (arr)=>{
+    const out=[];
+    for(let i=0;i<arr.length;i+=2) out.push(arr.slice(i,i+2));
+    return out.length ? out : [[]];
+  };
+
+  const chunksA = chunk2(pickedAAll);
+  const chunksB = chunk2(pickedBAll);
+
+  const total = all ? Math.max(chunksA.length, chunksB.length) : 1;
+
+  for(let i=0;i<total;i++){
+    const pickedA = (chunksA[i] || []).slice(0,2);
+    const pickedB = (chunksB[i] || []).slice(0,2);
+    const heatNo = startHeatNo + i;
+
+    const id = makeHeatId({grade, event, round, heatNo, classA, classB});
+    const lanes = laneAssign({classA, classB, pickedA, pickedB, fillStrategy: selFill.value});
+
+    state.heats.push({
+      id, grade: String(grade), event, round, heatNo,
+      classA, classB,
+      pickedA, pickedB,
+      fillStrategy: selFill.value,
+      lanes,
+      locked: false,
+      createdAt: Date.now()
+    });
+
+    if(!state.ui.currentHeatId) state.ui.currentHeatId = id;
+  }
+
   saveState(state);
-  setMsg(createMsg, `已建立：${grade}年級 ${event} ${round} 第${heatNo}組`);
+
+  if(all){
+    setMsg(createMsg, `已自動建立 ${total} 組：${grade}年級 ${event} ${round}（由已勾選名單分批每組每班 2 位）`);
+  }else{
+    setMsg(createMsg, `已建立：${grade}年級 ${event} ${round} 第${startHeatNo}組（取各班前 2 位）`);
+  }
   renderHeats();
-});
+}
+
 
 // === Sync ===
 bc.onmessage = (ev)=>{

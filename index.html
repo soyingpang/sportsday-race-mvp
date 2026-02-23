@@ -89,7 +89,14 @@
             <option value="empty">保留空道</option>
           </select>
         </label>
-        <button id="btnCreateHeat" class="primary">建立組次並分線</button>
+
+        <label>
+          <input type="checkbox" id="chkAutoHeats" />
+          依勾選名單自動產生多組（每組每班取 2 位，依座號順序）
+        </label>
+
+        <button id="btnCreateHeat" class="primary">建立 1 組（取前 2 位）</button>
+        <button id="btnAutoHeats" class="primary">一鍵自動排完所有組次</button>
       </div>
 
       <div id="createMsg" class="msg"></div>
