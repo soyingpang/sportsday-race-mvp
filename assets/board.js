@@ -1,4 +1,4 @@
-import { loadState, bc } from './store.js';
+import { loadState, subscribeStateUpdates } from './store.js';
 import { computeLeaderboard } from './logic.js';
 
 let state = loadState();
@@ -82,11 +82,10 @@ function tick(){
 }
 setInterval(tick, 1000); tick();
 
-bc.onmessage = (ev)=>{
-  if(ev?.data?.type === 'STATE_UPDATED'){
-    state = loadState();
-    render();
-  }
-};
+
+subscribeStateUpdates(()=>{
+  state = loadState();
+  render();
+});
 
 render();

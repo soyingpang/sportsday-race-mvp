@@ -1,4 +1,4 @@
-import { loadState, saveState, resetState, bc } from './store.js';
+import { loadState, saveState, resetState, subscribeStateUpdates } from './store.js';
 import { exportTotalScoreSheet, exportHeatScoreSheet, exportAllHeatsHandwriteOneSheet } from './export.js';
 import { parseCsv, gradeOfClass, laneAssign, makeHeatId } from './logic.js';
 let state = loadState();
@@ -479,12 +479,6 @@ function createHeats({all}){
 
 
 // === Sync ===
-bc.onmessage = (ev)=>{
-  if(ev?.data?.type === 'STATE_UPDATED'){
-    state = loadState();
-    renderAll();
-  }
-};
 
 selGrade?.addEventListener('change', renderClassOptions);
 selClassA?.addEventListener('change', renderPickers);

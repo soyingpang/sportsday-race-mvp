@@ -1,4 +1,4 @@
-import { loadState, saveState, bc } from './store.js';
+import { loadState, saveState, subscribeStateUpdates } from './store.js';
 import { computeLeaderboard, gradeOfClass, normalizeTimeInput } from './logic.js';
 
 let state = loadState();
@@ -206,22 +206,24 @@ inpEvent.addEventListener('change', renderHeatOptions);
 selRound.addEventListener('change', renderHeatOptions);
 selHeat.addEventListener('change', renderLaneForm);
 
-bc.onmessage = (ev)=>{
-  if(ev?.data?.type === 'STATE_UPDATED'){
-    const prev = selHeat.value;
-    state = loadState();
-    if(autoFollow?.checked){
-      // fully automatic: follow current heat if available; otherwise just refresh list
-      if(!followCurrentHeat()) renderHeatOptions({preserveHeatId: prev});
-    }else{
-      renderHeatOptions({preserveHeatId: prev});
-    }
-  }
-};
-
 if(autoFollow?.checked){
   if(!followCurrentHeat()) renderHeatOptions();
 }else{
   renderHeatOptions();
 }
 
+
+
+subscribeStateUpdates(()=>{
+  const follow = document.getElementById('chkFollowCurrent')?.checked;
+  const prev = document.getElementById('selHeat')?.value;
+  state = loadState();
+  if(!follow && prev){
+    renderHeatOptions();
+    document.getElementById('selHeat').value = prev;
+    renderLaneForm();
+  }else{
+    // follow current or no prev
+    renderHeatOptions();
+  }
+});

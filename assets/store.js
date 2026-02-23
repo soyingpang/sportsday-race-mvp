@@ -1,4 +1,5 @@
 const KEY = 'sportsday_race_v1';
+export const STORAGE_KEY = KEY;
 const CH = 'sportsday_race_bc';
 
 export function defaultState(){
@@ -46,3 +47,14 @@ export function resetState(){
 }
 
 export const bc = new BroadcastChannel(CH);
+
+
+export function subscribeStateUpdates(onUpdate){
+  // BroadcastChannel for same-origin tabs; storage event as fallback.
+  bc.onmessage = (ev)=>{
+    if(ev?.data?.type === 'STATE_UPDATED') onUpdate?.(ev.data);
+  };
+  window.addEventListener('storage', (e)=>{
+    if(e.key === KEY) onUpdate?.({type:'STATE_UPDATED', updatedAt: Date.now(), via:'storage'});
+  });
+}

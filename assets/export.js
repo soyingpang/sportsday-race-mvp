@@ -45,44 +45,53 @@ export function exportAllHeatsHandwriteOneSheet(state, {sheetName='場次手寫�
     return;
   }
 
+  // One clean table (single sheet), sorted by heat then lane.
+  // Keep printable: insert a blank row between heats and add Excel row breaks.
   const rows = [];
-  const pageBreaks = []; // row indices to insert page break before
+  const rowBreaks = [];
   const add = (r)=>rows.push(r);
 
-  const headerCols = [{wch:6},{wch:8},{wch:14},{wch:10},{wch:16},{wch:8},{wch:18}];
+  add(['年級','項目','輪次','組次','線道','班別','座號','姓名','成績(秒)','名次','備註']);
 
   for(let i=0;i<heats.length;i++){
     const h = heats[i];
-
-    // page break before each heat after first
     if(i>0){
-      pageBreaks.push({r: rows.length}); // break before this row
-      add([]); // small spacer
+      // Page break before the next heat block, but keep format as one table.
+      rowBreaks.push({r: rows.length});
+      add([]); // spacer row for readability (still not "亂")
     }
-
-    add(['年級', `${h.grade} 年級`, '', '項目', h.event, '', '']);
-    add(['輪次', h.round, '', '組次', `第 ${h.heatNo} 組`, '', '']);
-    add(['A 班', h.classA, '', 'B 班', h.classB, '', '']);
-    add([]);
-    add(['Lane','班級','姓名','成績(秒)','狀態(DNS/DNF/DQ)','名次','備註']);
-
-    for(const L of (h.lanes||[])){
+    const lanes = (h.lanes||[]).slice().sort((a,b)=>(a.lane||0)-(b.lane||0));
+    for(const L of lanes){
       const p = L.pid ? pMap[L.pid] : null;
       const cls = p ? p.class : (L.cls || '');
+      const no = p ? (p.no ?? '') : '';
       const name = p ? p.name : '（空）';
-      add([L.lane, cls, name, '', '', '', '']);
+      add([
+        `${h.grade}`,
+        h.event,
+        h.round,
+        `${h.heatNo}`,
+        `${L.lane}`,
+        cls,
+        no,
+        name,
+        '', // time (handwrite)
+        '', // rank (handwrite)
+        ''  // note
+      ]);
     }
-
-    // footer spacer to help printing
-    add([]);
   }
 
-  const {wb, ws} = aoaToBook(sheetName, rows, headerCols);
+  const colWidths = [
+    {wch:6},{wch:10},{wch:8},{wch:6},{wch:6},
+    {wch:8},{wch:6},{wch:14},{wch:10},{wch:6},{wch:18}
+  ];
 
-  // SheetJS supports page breaks in many viewers (Excel honors them).
-  ws['!rowBreaks'] = pageBreaks;
+  const {wb, ws} = aoaToBook(sheetName, rows, colWidths);
 
-  // Freeze top row? Not ideal because multi-block; keep none to avoid odd.
+  // Apply row breaks for printing (Excel honors in most cases)
+  ws['!rowBreaks'] = rowBreaks;
+
   const ts = new Date().toISOString().slice(0,10).replaceAll('-','');
   XLSX.writeFile(wb, `場次手寫計分表_${ts}.xlsx`);
 }
