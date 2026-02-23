@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>徑賽系統（MVP）</title>
+  <link rel="stylesheet" href="./assets/app.css" />
+</head>
+<body>
+  <header class="bar">
+    <div class="title">徑賽系統（MVP / 4 道）</div>
+    <nav class="nav">
+      <a href="./board.html" target="_blank" rel="noopener">大螢幕看板</a>
+      <button id="btnReset" class="danger">重置本機資料</button>
+    </nav>
+  </header>
+
+  <main class="grid">
+    <section class="card">
+      <h2>1) 匯入參賽名單（CSV）</h2>
+      <p class="muted">
+        欄位：id,class,no,name,present（present 允許 true/false 或 1/0）
+      </p>
+      <div class="row">
+        <input type="file" id="fileCsv" accept=".csv,text/csv" />
+        <button id="btnLoadSample">載入範例名單</button>
+      </div>
+      <div id="importMsg" class="msg"></div>
+      <details>
+        <summary>CSV 範例下載</summary>
+        <p class="muted">repo 內建：<code>data/participants.sample.csv</code></p>
+      </details>
+    </section>
+
+    <section class="card">
+      <h2>2) 參賽者概覽</h2>
+      <div id="participantsSummary" class="mono"></div>
+    </section>
+
+    <section class="card">
+      <h2>3) 建立一組（同年級、兩班對賽）</h2>
+      <p class="muted">規則：每組 A 班 2 人 + B 班 2 人，Lane1→4 順序分線（A1,A2,B1,B2）。</p>
+
+      <div class="row">
+        <label>年級
+          <select id="selGrade">
+            <option value="1">一年級</option>
+            <option value="2">二年級</option>
+          </select>
+        </label>
+        <label>項目
+          <input id="inpEvent" value="60m" />
+        </label>
+        <label>輪次
+          <select id="selRound">
+            <option value="預賽">預賽</option>
+            <option value="決賽">決賽</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="row">
+        <label>A 班
+          <select id="selClassA"></select>
+        </label>
+        <label>B 班
+          <select id="selClassB"></select>
+        </label>
+        <label>組次
+          <input id="inpHeatNo" type="number" min="1" value="1" />
+        </label>
+      </div>
+
+      <div class="row">
+        <div class="col">
+          <h3>A 班選手（最多 2）</h3>
+          <div id="pickA" class="picker"></div>
+        </div>
+        <div class="col">
+          <h3>B 班選手（最多 2）</h3>
+          <div id="pickB" class="picker"></div>
+        </div>
+      </div>
+
+      <div class="row">
+        <label>不足 2 人補位策略
+          <select id="selFill">
+            <option value="other">由另一班補足（先填滿 Lane）</option>
+            <option value="empty">保留空道</option>
+          </select>
+        </label>
+        <button id="btnCreateHeat" class="primary">建立組次並分線</button>
+      </div>
+
+      <div id="createMsg" class="msg"></div>
+    </section>
+
+    <section class="card span2">
+      <h2>4) 組次清單（可指定看板顯示、鎖定/重排）</h2>
+      <div id="heatsList"></div>
+    </section>
+  </main>
+
+  <footer class="foot muted">
+    <div>資料儲存在此瀏覽器 localStorage；多分頁以 BroadcastChannel 同步。</div>
+  </footer>
+
+  <script type="module" src="./assets/app.js"></script>
+</body>
+</html>

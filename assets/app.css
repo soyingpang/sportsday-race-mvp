@@ -1,0 +1,47 @@
+:root{
+  --bg:#0b0f14; --fg:#e6edf3; --muted:#9fb0c0; --card:#121a23; --line:#263241;
+  --pri:#2f81f7; --danger:#f85149;
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", "Noto Sans TC", Arial;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg)}
+a{color:var(--pri);text-decoration:none}
+a:hover{text-decoration:underline}
+.bar{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--line);position:sticky;top:0;background:rgba(11,15,20,.92);backdrop-filter:blur(6px)}
+.title{font-weight:700;letter-spacing:.5px}
+.nav{display:flex;gap:10px;align-items:center}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:12px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px;box-shadow:0 8px 22px rgba(0,0,0,.18)}
+.card h2{margin:0 0 8px 0;font-size:18px}
+.card h3{margin:8px 0;font-size:15px;color:var(--muted)}
+.span2{grid-column:1 / span 2}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:8px 0}
+.col{flex:1;min-width:260px}
+label{display:flex;gap:6px;align-items:center;color:var(--muted)}
+input,select,button{
+  background:#0f1620;border:1px solid var(--line);color:var(--fg);
+  border-radius:10px;padding:8px 10px
+}
+button{cursor:pointer}
+button.primary{border-color:rgba(47,129,247,.7);background:rgba(47,129,247,.16)}
+button.danger{border-color:rgba(248,81,73,.7);background:rgba(248,81,73,.12)}
+button:disabled{opacity:.5;cursor:not-allowed}
+.muted{color:var(--muted);font-size:13px}
+.mono{font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace}
+.msg{margin-top:8px;color:var(--muted);min-height:1.2em}
+.picker{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.picker label{justify-content:flex-start;background:#0f1620;border:1px solid var(--line);padding:6px 8px;border-radius:10px}
+.table{width:100%;border-collapse:collapse;margin-top:8px}
+.table th,.table td{border-bottom:1px solid var(--line);padding:8px 6px;text-align:left}
+.badge{display:inline-block;padding:2px 8px;border-radius:999px;border:1px solid var(--line);color:var(--muted);font-size:12px}
+.foot{padding:10px 12px;border-top:1px solid var(--line)}
+/* board */
+.board .grid{display:block}
+.boardMain{display:grid;grid-template-columns:2fr 1fr;gap:12px;padding:12px}
+.board .card{border-radius:18px}
+.big{font-size:20px}
+.lanes{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.lane{padding:10px;border:1px solid var(--line);border-radius:14px;background:#0f1620}
+.lane .n{font-size:12px;color:var(--muted)}
+.lane .p{font-size:20px;font-weight:700;margin-top:6px}
+.lane .c{font-size:14px;color:var(--muted);margin-top:2px}

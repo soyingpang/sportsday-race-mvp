@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>大螢幕看板</title>
+  <link rel="stylesheet" href="./assets/app.css" />
+</head>
+<body class="board">
+  <header class="bar">
+    <div class="title">大螢幕看板</div>
+    <div class="muted" id="clock"></div>
+  </header>
+
+  <main class="boardMain">
+    <section class="card">
+      <h2>目前組次</h2>
+      <div id="currentHeat"></div>
+    </section>
+
+    <section class="card">
+      <h2>下一組預告</h2>
+      <div id="nextHeat"></div>
+    </section>
+  </main>
+
+  <script type="module" src="./assets/board.js"></script>
+</body>
+</html>
