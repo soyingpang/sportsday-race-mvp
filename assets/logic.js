@@ -80,3 +80,82 @@ export function laneAssign({classA, classB, pickedA, pickedB, fillStrategy}){
 export function makeHeatId({grade, event, round, heatNo, classA, classB}){
   return `${grade}-${event}-${round}-H${String(heatNo)}-${classA}_vs_${classB}-${Date.now()}`;
 }
+
+
+// === Ranking ===
+export function normalizeTimeInput(v){
+  if(v === null || v === undefined) return null;
+  const s = String(v).trim();
+  if(!s) return null;
+  const n = Number(s);
+  return Number.isFinite(n) ? n : null;
+}
+
+export function statusRank(status){
+  // smaller is better; OK first, then DNS/DNF/DQ at bottom
+  const s = String(status || 'OK').toUpperCase();
+  if(s === 'OK') return 0;
+  if(s === 'DNS') return 1;
+  if(s === 'DNF') return 2;
+  if(s === 'DQ')  return 3;
+  return 9;
+}
+
+export function computeLeaderboard(state, {grade, event, round}){
+  const heats = (state.heats||[]).filter(h =>
+    String(h.grade)===String(grade) &&
+    String(h.event)===String(event) &&
+    String(h.round)===String(round)
+  );
+
+  const pMap = Object.fromEntries((state.participants||[]).map(p=>[p.id,p]));
+  const rows = [];
+  for(const h of heats){
+    const rHeat = (state.results||{})[h.id] || {};
+    for(const L of (h.lanes||[])){
+      const pid = L.pid;
+      if(!pid) continue;
+      const rec = rHeat[String(L.lane)] || { pid, status:'OK', timeSec:null, note:'' };
+      const p = pMap[pid];
+      if(!p) continue;
+      rows.push({
+        pid,
+        name: p.name,
+        class: p.class,
+        no: p.no,
+        heatId: h.id,
+        heatNo: h.heatNo,
+        lane: L.lane,
+        status: String(rec.status||'OK').toUpperCase(),
+        timeSec: (rec.timeSec===0 || rec.timeSec) ? rec.timeSec : null,
+        note: rec.note || ''
+      });
+    }
+  }
+
+  rows.sort((a,b)=>{
+    const sa = statusRank(a.status);
+    const sb = statusRank(b.status);
+    if(sa !== sb) return sa - sb;
+    // OK sort by time; null times go after numeric times
+    const ta = (a.timeSec===0 || a.timeSec) ? a.timeSec : Infinity;
+    const tb = (b.timeSec===0 || b.timeSec) ? b.timeSec : Infinity;
+    if(ta !== tb) return ta - tb;
+    // stable tie-breaker: class, no
+    const cc = String(a.class).localeCompare(String(b.class), 'zh-Hant');
+    if(cc!==0) return cc;
+    return (a.no||0)-(b.no||0);
+  });
+
+  // assign ranks for OK only; others show '-' rank
+  let rank = 0;
+  for(const row of rows){
+    if(row.status === 'OK' && (row.timeSec===0 || row.timeSec)){
+      rank += 1;
+      row.rank = rank;
+    }else{
+      row.rank = null;
+    }
+  }
+  return rows;
+}

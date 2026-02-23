@@ -6,6 +6,11 @@ export function defaultState(){
     version: 1,
     participants: [],
     heats: [],
+    // results[heatId][lane] = { pid, timeSec, status, note, updatedAt }
+    results: {},
+    // For non-track 3-category score sheet (manual handwriting / optional later input)
+    categories: { c1: '類別1', c2: '類別2', c3: '類別3' },
+    categoryScores: {},
     ui: { currentHeatId: null },
     updatedAt: Date.now()
   };
@@ -17,6 +22,11 @@ export function loadState(){
     if(!raw) return defaultState();
     const st = JSON.parse(raw);
     if(!st || st.version !== 1) return defaultState();
+    // backfill new fields for older data
+    st.results = st.results || {};
+    st.categories = st.categories || { c1:'類別1', c2:'類別2', c3:'類別3' };
+    st.categoryScores = st.categoryScores || {};
+    st.ui = st.ui || { currentHeatId: null };
     return st;
   }catch(e){
     console.warn('loadState fail', e);

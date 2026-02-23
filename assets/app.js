@@ -1,6 +1,7 @@
 import { loadState, saveState, resetState, bc } from './store.js';
+import { exportTotalScoreSheet } from './export.js';
 import { parseCsv, gradeOfClass, laneAssign, makeHeatId } from './logic.js';
-import { exportScoreSheet, exportAllScoreSheets, exportRosterScoreSheet } from './export.js';
+import { exportScoreSheet, exportAllScoreSheets } from './export.js';
 
 let state = loadState();
 
@@ -21,14 +22,43 @@ const chkAutoHeats = el('chkAutoHeats');
 const btnAutoHeats = el('btnAutoHeats');
 const createMsg = el('createMsg');
 const heatsList = el('heatsList');
-const btnExportRoster = el('btnExportRoster');
 const cat1 = el('cat1');
 const cat2 = el('cat2');
 const cat3 = el('cat3');
+const btnExportTotal = el('btnExportTotal');
+const exportMsg = el('exportMsg');
 const heatsOverview = el('heatsOverview');
 const btnExportAll = el('btnExportAll');
 
 function setMsg(node, text){ node.textContent = text || ''; }
+
+function syncCategoriesToUI(){
+  const cats = state.categories || {c1:'類別1',c2:'類別2',c3:'類別3'};
+  if(cat1) cat1.value = cats.c1 || '類別1';
+  if(cat2) cat2.value = cats.c2 || '類別2';
+  if(cat3) cat3.value = cats.c3 || '類別3';
+}
+
+function saveCategoriesFromUI(){
+  if(!cat1 || !cat2 || !cat3) return;
+  state.categories = { c1: (cat1.value||'類別1').trim(), c2: (cat2.value||'類別2').trim(), c3: (cat3.value||'類別3').trim() };
+  saveState(state);
+}
+
+cat1?.addEventListener('change', saveCategoriesFromUI);
+cat2?.addEventListener('change', saveCategoriesFromUI);
+cat3?.addEventListener('change', saveCategoriesFromUI);
+
+btnExportTotal?.addEventListener('click', ()=>{
+  if(!state.participants?.length){
+    exportMsg.textContent = '請先匯入名單。';
+    return;
+  }
+  saveCategoriesFromUI();
+  exportTotalScoreSheet(state);
+  exportMsg.textContent = '已下載 Excel。';
+});
+
 
 function byId(arr){ return Object.fromEntries(arr.map(x=>[x.id,x])); }
 

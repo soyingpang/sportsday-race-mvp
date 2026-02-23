@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>計分員輸入</title>
+  <link rel="stylesheet" href="./assets/app.css" />
+</head>
+<body>
+  <header class="bar">
+    <div class="title">計分員輸入（徑賽）</div>
+    <nav class="nav">
+      <a href="./index.html" target="_blank" rel="noopener">回管理端</a>
+      <a href="./board.html" target="_blank" rel="noopener">看板</a>
+    </nav>
+  </header>
+
+  <main class="grid">
+    <section class="card span2">
+      <h2>1) 選擇要入分的組次</h2>
+      <div class="row">
+        <label>年級
+          <select id="selGrade">
+            <option value="1">一年級</option>
+            <option value="2">二年級</option>
+          </select>
+        </label>
+        <label>項目 <input id="inpEvent" value="60m" /></label>
+        <label>輪次
+          <select id="selRound">
+            <option value="預賽">預賽</option>
+            <option value="決賽">決賽</option>
+          </select>
+        </label>
+        <button id="btnFollowCurrent" class="primary">跟隨看板目前組次</button>
+      </div>
+
+      <div class="row">
+        <label>組次
+          <select id="selHeat"></select>
+        </label>
+        <span id="pickMsg" class="muted"></span>
+      </div>
+    </section>
+
+    <section class="card span2">
+      <h2>2) 輸入本組成績（Lane1–4）</h2>
+      <p class="muted">時間（秒）支援小數；狀態可選 DNS/DNF/DQ；輸入即自動儲存並同步看板排行榜。</p>
+      <div id="laneForm"></div>
+      <div class="row">
+        <button id="btnClearHeat" class="danger">清除此組成績</button>
+        <span id="saveMsg" class="muted"></span>
+      </div>
+    </section>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+  <script type="module" src="./assets/score.js"></script>
+</body>
+</html>

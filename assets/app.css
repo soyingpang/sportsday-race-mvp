@@ -37,7 +37,7 @@ button:disabled{opacity:.5;cursor:not-allowed}
 .foot{padding:10px 12px;border-top:1px solid var(--line)}
 /* board */
 .board .grid{display:block}
-.boardMain{display:grid;grid-template-columns:2fr 1fr;gap:12px;padding:12px}
+.boardMain{display:grid;grid-template-columns:2fr 1fr 1fr;gap:12px;padding:12px}
 .board .card{border-radius:18px}
 .big{font-size:20px}
 .lanes{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}

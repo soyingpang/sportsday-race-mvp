@@ -1,4 +1,5 @@
 import { loadState, bc } from './store.js';
+import { computeLeaderboard } from './logic.js';
 
 let state = loadState();
 
@@ -6,6 +7,7 @@ const el = (id)=>document.getElementById(id);
 const clock = el('clock');
 const currentHeat = el('currentHeat');
 const nextHeat = el('nextHeat');
+const leaderboard = el('leaderboard');
 
 function byId(arr){ return Object.fromEntries(arr.map(x=>[x.id,x])); }
 
@@ -25,6 +27,27 @@ function render(){
 
   currentHeat.innerHTML = cur ? heatHtml(cur,pMap,'big') : '<div class="muted">尚未指定目前組次。</div>';
   nextHeat.innerHTML = nxt ? heatHtml(nxt,pMap,'') : '<div class="muted">（無）</div>';
+  // leaderboard follows current heat's event/round/grade
+  if(leaderboard){
+    if(cur){
+      const rows = computeLeaderboard(state, {grade:cur.grade, event:cur.event, round:cur.round});
+      const topN = rows.slice(0, 8);
+      leaderboard.innerHTML = topN.length ? `
+        <table class="table">
+          <thead><tr><th>#</th><th>班級</th><th>姓名</th><th>成績</th></tr></thead>
+          <tbody>
+            ${topN.map(r=>{
+              const score = r.status==='OK' && (r.timeSec===0 || r.timeSec) ? String(r.timeSec) : r.status;
+              const rk = r.rank ?? '-';
+              return `<tr><td>${rk}</td><td>${escapeHtml(r.class)}</td><td>${escapeHtml(r.name)}</td><td>${escapeHtml(score)}</td></tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      ` : '<div class="muted">尚無成績。</div>';
+    }else{
+      leaderboard.innerHTML = '<div class="muted">尚未指定目前組次。</div>';
+    }
+  }
 }
 
 function heatHtml(h, pMap, cls){
