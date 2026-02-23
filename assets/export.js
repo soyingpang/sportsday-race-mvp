@@ -101,3 +101,50 @@ export function exportAllScoreSheets(heats, participants){
   const file = `All_ScoreSheets_${new Date().toISOString().slice(0,10)}.xlsx`;
   XLSX.writeFile(wb, file);
 }
+
+// 匯出「總名單大表」：所有人一張表 + 3 個空白入分欄（可列印手寫）
+export function exportRosterScoreSheet(participants, categories = ['類別1','類別2','類別3']){
+  if(typeof XLSX === 'undefined'){
+    alert('缺少 XLSX 函式庫，請確認已連網載入 xlsx.full.min.js');
+    return;
+  }
+  const cats = (categories||[]).slice(0,3);
+  while(cats.length<3) cats.push(`類別${cats.length+1}`);
+
+  const ps = (participants||[])
+    .filter(p=>p && p.present !== false)
+    .slice()
+    .sort((a,b)=>{
+      const ca = String(a.class||'');
+      const cb = String(b.class||'');
+      if(ca !== cb) return ca.localeCompare(cb, 'zh-Hant');
+      return (Number(a.no||0) - Number(b.no||0));
+    });
+
+  const rows = [
+    ['親子遊戲日｜手寫入分總表'],
+    [],
+    ['班級','座號','姓名', cats[0], cats[1], cats[2], '備註'],
+  ];
+
+  ps.forEach(p=>{
+    rows.push([
+      p.class || '',
+      Number(p.no||'') || '',
+      p.name || '',
+      '', '', '', ''
+    ]);
+  });
+
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols'] = [
+    {wch:8},{wch:6},{wch:14},{wch:12},{wch:12},{wch:12},{wch:18}
+  ];
+  // Freeze first 3 rows (title + blank + header) for easier scrolling (best-effort)
+  ws['!freeze'] = { xSplit:0, ySplit:3 };
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, '總表');
+  const ts = new Date().toISOString().slice(0,10).replaceAll('-','');
+  XLSX.writeFile(wb, `總名單手寫入分表_${ts}.xlsx`);
+}

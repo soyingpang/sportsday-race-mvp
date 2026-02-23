@@ -1,6 +1,6 @@
 import { loadState, saveState, resetState, bc } from './store.js';
 import { parseCsv, gradeOfClass, laneAssign, makeHeatId } from './logic.js';
-import { exportScoreSheet, exportAllScoreSheets } from './export.js';
+import { exportScoreSheet, exportAllScoreSheets, exportRosterScoreSheet } from './export.js';
 
 let state = loadState();
 
@@ -21,6 +21,10 @@ const chkAutoHeats = el('chkAutoHeats');
 const btnAutoHeats = el('btnAutoHeats');
 const createMsg = el('createMsg');
 const heatsList = el('heatsList');
+const btnExportRoster = el('btnExportRoster');
+const cat1 = el('cat1');
+const cat2 = el('cat2');
+const cat3 = el('cat3');
 const heatsOverview = el('heatsOverview');
 const btnExportAll = el('btnExportAll');
 
