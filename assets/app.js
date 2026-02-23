@@ -1,8 +1,6 @@
 import { loadState, saveState, resetState, bc } from './store.js';
-import { exportTotalScoreSheet } from './export.js';
+import { exportTotalScoreSheet, exportHeatScoreSheet } from './export.js';
 import { parseCsv, gradeOfClass, laneAssign, makeHeatId } from './logic.js';
-import { exportScoreSheet, exportAllScoreSheets } from './export.js';
-
 let state = loadState();
 
 const el = (id)=>document.getElementById(id);
@@ -28,7 +26,6 @@ const cat3 = el('cat3');
 const btnExportTotal = el('btnExportTotal');
 const exportMsg = el('exportMsg');
 const heatsOverview = el('heatsOverview');
-const btnExportAll = el('btnExportAll');
 
 function setMsg(node, text){ node.textContent = text || ''; }
 
@@ -273,7 +270,7 @@ function renderHeats(){
         return;
       }
       if(act === 'export'){
-        exportScoreSheet(state.heats[idx], state.participants);
+        exportHeatScoreSheet(state.heats[idx], state.participants);
         return;
       }
       if(act === 'toggleLock'){
@@ -333,14 +330,6 @@ document.getElementById('btnLoadSample')?.addEventListener('click', async ()=>{
   const res = await fetch('./data/participants.sample.csv', {cache:'no-store'});
   const text = await res.text();
   importCsvText(text);
-});
-
-btnExportAll?.addEventListener('click', ()=>{
-  if(!state.heats.length){
-    alert('目前沒有任何組次可匯出。');
-    return;
-  }
-  exportAllScoreSheets(state.heats, state.participants);
 });
 
 document.getElementById('btnReset')?.addEventListener('click', ()=>{
