@@ -11,6 +11,7 @@ const selHeat = el('selHeat');
 const pickMsg = el('pickMsg');
 const laneForm = el('laneForm');
 const saveMsg = el('saveMsg');
+const autoFollow = el('autoFollow');
 
 function escapeHtml(s){
   return String(s ?? '')
@@ -27,10 +28,16 @@ function heatsFiltered(){
     .sort((a,b)=> (a.heatNo||0)-(b.heatNo||0) || (a.createdAt||0)-(b.createdAt||0));
 }
 
-function renderHeatOptions(){
+function renderHeatOptions({preserveHeatId=null} = {}){
   const hs = heatsFiltered();
+  const prev = preserveHeatId ?? selHeat.value;
+
   selHeat.innerHTML = hs.map(h=>`<option value="${h.id}">第 ${h.heatNo} 組（${h.classA} vs ${h.classB}）</option>`).join('');
   pickMsg.textContent = hs.length ? `共 ${hs.length} 組` : '（找不到符合的組次）';
+
+  // keep previous selection if still exists
+  if(prev && hs.some(h=>h.id===prev)) selHeat.value = prev;
+
   renderLaneForm();
 }
 
@@ -156,6 +163,19 @@ document.getElementById('btnClearHeat')?.addEventListener('click', ()=>{
   }
 });
 
+function followCurrentHeat(){
+  const curId = state.ui?.currentHeatId;
+  const h = (state.heats||[]).find(x=>x.id===curId);
+  if(!h) return false;
+  selGrade.value = String(h.grade);
+  inpEvent.value = h.event;
+  selRound.value = h.round;
+  renderHeatOptions({preserveHeatId: h.id});
+  selHeat.value = h.id;
+  renderLaneForm();
+  return true;
+}
+
 document.getElementById('btnFollowCurrent')?.addEventListener('click', ()=>{
   const curId = state.ui?.currentHeatId;
   const h = (state.heats||[]).find(x=>x.id===curId);
@@ -163,7 +183,12 @@ document.getElementById('btnFollowCurrent')?.addEventListener('click', ()=>{
   selGrade.value = String(h.grade);
   inpEvent.value = h.event;
   selRound.value = h.round;
+  if(autoFollow?.checked){
+  if(!followCurrentHeat()) renderHeatOptions();
+}else{
   renderHeatOptions();
+}
+
   selHeat.value = h.id;
   renderLaneForm();
 });
@@ -175,9 +200,20 @@ selHeat.addEventListener('change', renderLaneForm);
 
 bc.onmessage = (ev)=>{
   if(ev?.data?.type === 'STATE_UPDATED'){
+    const prev = selHeat.value;
     state = loadState();
-    renderHeatOptions();
+    if(autoFollow?.checked){
+      // fully automatic: follow current heat if available; otherwise just refresh list
+      if(!followCurrentHeat()) renderHeatOptions({preserveHeatId: prev});
+    }else{
+      renderHeatOptions({preserveHeatId: prev});
+    }
   }
 };
 
-renderHeatOptions();
+if(autoFollow?.checked){
+  if(!followCurrentHeat()) renderHeatOptions();
+}else{
+  renderHeatOptions();
+}
+

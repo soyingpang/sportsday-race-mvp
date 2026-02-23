@@ -25,6 +25,7 @@ const cat2 = el('cat2');
 const cat3 = el('cat3');
 const btnExportTotal = el('btnExportTotal');
 const exportMsg = el('exportMsg');
+const btnExportHeatsOneSheet = el('btnExportHeatsOneSheet');
 const heatsOverview = el('heatsOverview');
 
 function setMsg(node, text){ node.textContent = text || ''; }
