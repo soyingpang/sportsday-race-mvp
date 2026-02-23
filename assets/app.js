@@ -67,6 +67,14 @@ btnExportTotal?.addEventListener('click', ()=>{
     return;
   }
   saveCategoriesFromUI();
+  try{
+    exportTotalScoreSheet(state);
+    exportMsg.textContent = '已匯出：總分表（單一工作表）';
+  }catch(e){
+    exportMsg.textContent = '匯出失敗：' + (e?.message || e);
+    throw e;
+  }
+});
 
 btnExportHeatsOneSheet?.addEventListener('click', ()=>{
   if(!state.heats?.length){
@@ -81,11 +89,6 @@ btnExportHeatsOneSheet?.addEventListener('click', ()=>{
     throw e;
   }
 });
-  exportTotalScoreSheet(state);
-  exportMsg.textContent = '已下載 Excel。';
-});
-
-
 function byId(arr){ return Object.fromEntries(arr.map(x=>[x.id,x])); }
 
 function classesOfGrade(grade){
