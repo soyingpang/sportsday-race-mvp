@@ -1,5 +1,5 @@
 import { loadState, saveState, resetState, bc } from './store.js';
-import { exportTotalScoreSheet, exportHeatScoreSheet } from './export.js';
+import { exportTotalScoreSheet, exportHeatScoreSheet, exportAllHeatsHandwriteOneSheet } from './export.js';
 import { parseCsv, gradeOfClass, laneAssign, makeHeatId } from './logic.js';
 let state = loadState();
 
@@ -67,6 +67,20 @@ btnExportTotal?.addEventListener('click', ()=>{
     return;
   }
   saveCategoriesFromUI();
+
+btnExportHeatsOneSheet?.addEventListener('click', ()=>{
+  if(!state.heats?.length){
+    exportMsg.textContent = '尚未建立任何場次。';
+    return;
+  }
+  try{
+    exportAllHeatsHandwriteOneSheet(state, {sheetName:'場次手寫計分表'});
+    exportMsg.textContent = '已匯出：場次手寫計分表（單一工作表）';
+  }catch(e){
+    exportMsg.textContent = '匯出失敗：' + (e?.message || e);
+    throw e;
+  }
+});
   exportTotalScoreSheet(state);
   exportMsg.textContent = '已下載 Excel。';
 });
