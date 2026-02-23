@@ -1,6 +1,6 @@
 import { loadState, saveState, resetState, bc } from './store.js';
 import { parseCsv, gradeOfClass, laneAssign, makeHeatId } from './logic.js';
-import { exportScoreSheet } from './export.js';
+import { exportScoreSheet, exportAllScoreSheets } from './export.js';
 
 let state = loadState();
 
@@ -19,6 +19,8 @@ const pickB = el('pickB');
 const selFill = el('selFill');
 const createMsg = el('createMsg');
 const heatsList = el('heatsList');
+const heatsOverview = el('heatsOverview');
+const btnExportAll = el('btnExportAll');
 
 function setMsg(node, text){ node.textContent = text || ''; }
 
@@ -118,12 +120,66 @@ function renderParticipantsSummary(){
   participantsSummary.textContent = `${lines}\n\n合計：${total} 人（出席）`;
 }
 
+function renderHeatsOverview(pMap){
+  if(!heatsOverview) return;
+  if(!state.heats.length){
+    heatsOverview.innerHTML = '';
+    return;
+  }
+  const heats = state.heats.slice().sort((a,b)=>a.createdAt-b.createdAt);
+  const head = `
+    <table class="table">
+      <thead>
+        <tr>
+          <th>看板</th>
+          <th>年級</th><th>項目</th><th>輪次</th><th>組次</th><th>A班</th><th>B班</th>
+          <th>Lane1</th><th>Lane2</th><th>Lane3</th><th>Lane4</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${heats.map(h=>{
+          const isCurrent = state.ui.currentHeatId === h.id;
+          const laneCell = (L)=>{
+            const p = L.pid ? pMap[L.pid] : null;
+            const n = p ? p.name : '（空）';
+            const c = p ? p.class : (L.cls||'');
+            return `${escapeHtml(c)} ${escapeHtml(n)}`.trim();
+          };
+          return `
+            <tr>
+              <td><button data-act="setCurrent" data-id="${h.id}">${isCurrent?'✅':'設為'}</button></td>
+              <td>${h.grade}</td>
+              <td>${escapeHtml(h.event)}</td>
+              <td>${escapeHtml(h.round)}</td>
+              <td>${h.heatNo}</td>
+              <td>${escapeHtml(h.classA)}</td>
+              <td>${escapeHtml(h.classB)}</td>
+              <td>${laneCell(h.lanes[0])}</td>
+              <td>${laneCell(h.lanes[1])}</td>
+              <td>${laneCell(h.lanes[2])}</td>
+              <td>${laneCell(h.lanes[3])}</td>
+            </tr>`;
+        }).join('')}
+      </tbody>
+    </table>
+    <div class="muted">提示：此表為「全部分組一次顯示」。點第一欄可快速切換看板目前組次。</div>
+  `;
+  heatsOverview.innerHTML = head;
+  heatsOverview.querySelectorAll('button[data-act="setCurrent"]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      state.ui.currentHeatId = btn.dataset.id;
+      saveState(state);
+    });
+  });
+}
+
 function renderHeats(){
   if(!state.heats.length){
     heatsList.innerHTML = '<div class="muted">尚未建立任何組次。</div>';
     return;
   }
   const pMap = byId(state.participants);
+  renderHeatsOverview(pMap);
   const rows = state.heats
     .slice()
     .sort((a,b)=>a.createdAt-b.createdAt)
@@ -241,6 +297,14 @@ document.getElementById('btnLoadSample')?.addEventListener('click', async ()=>{
   const res = await fetch('./data/participants.sample.csv', {cache:'no-store'});
   const text = await res.text();
   importCsvText(text);
+});
+
+btnExportAll?.addEventListener('click', ()=>{
+  if(!state.heats.length){
+    alert('目前沒有任何組次可匯出。');
+    return;
+  }
+  exportAllScoreSheets(state.heats, state.participants);
 });
 
 document.getElementById('btnReset')?.addEventListener('click', ()=>{
