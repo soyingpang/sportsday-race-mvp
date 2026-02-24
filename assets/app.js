@@ -491,3 +491,9 @@ function renderAll(){
 }
 
 renderAll();
+
+// === Remote cross-device sync (optional) ===
+(async ()=>{
+  await RemoteSync.init();
+  onSave((st)=>RemoteSync.push(st));
+})();

@@ -2,6 +2,10 @@ const KEY = 'sportsday_race_v1';
 export const STORAGE_KEY = KEY;
 const CH = 'sportsday_race_bc';
 
+const saveHooks = [];
+export function onSave(cb){ if(typeof cb==='function') saveHooks.push(cb); }
+
+
 export function defaultState(){
   return {
     version: 1,
@@ -35,10 +39,15 @@ export function loadState(){
   }
 }
 
-export function saveState(state, {broadcast=true} = {}){
+export function saveState(state, {broadcast=true, runHooks=true} = {}){
   state.updatedAt = Date.now();
   localStorage.setItem(KEY, JSON.stringify(state));
   if(broadcast) bc.postMessage({type:'STATE_UPDATED', updatedAt: state.updatedAt});
+  if(runHooks){
+    for(const fn of saveHooks){
+      try{ fn(state); }catch(e){ console.warn('onSave hook fail', e); }
+    }
+  }
 }
 
 export function resetState(){

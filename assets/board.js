@@ -2,79 +2,12 @@ import { loadState, subscribeStateUpdates } from './store.js';
 import { computeLeaderboard } from './logic.js';
 
 let state = loadState();
-
 const el = (id)=>document.getElementById(id);
+
 const clock = el('clock');
-const currentHeat = el('currentHeat');
-const nextHeat = el('nextHeat');
+const lbTitle = el('lbTitle');
 const leaderboard = el('leaderboard');
-
-function byId(arr){ return Object.fromEntries(arr.map(x=>[x.id,x])); }
-
-function escapeHtml(s){
-  return String(s ?? '')
-    .replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;')
-    .replaceAll('"','&quot;').replaceAll("'",'&#39;');
-}
-
-function render(){
-  const pMap = byId(state.participants);
-  const heats = state.heats.slice().sort((a,b)=>a.createdAt-b.createdAt);
-  const curId = state.ui.currentHeatId;
-  const curIdx = heats.findIndex(h=>h.id===curId);
-  const cur = curIdx>=0 ? heats[curIdx] : null;
-  const nxt = curIdx>=0 ? heats[curIdx+1] : (heats[0] || null);
-
-  currentHeat.innerHTML = cur ? heatHtml(cur,pMap,'big') : '<div class="muted">尚未指定目前組次。</div>';
-  nextHeat.innerHTML = nxt ? heatHtml(nxt,pMap,'') : '<div class="muted">（無）</div>';
-  // leaderboard follows current heat's event/round/grade
-  if(leaderboard){
-    if(cur){
-      const rows = computeLeaderboard(state, {grade:cur.grade, event:cur.event, round:cur.round});
-      const topN = rows.slice(0, 8);
-      leaderboard.innerHTML = topN.length ? `
-        <table class="table">
-          <thead><tr><th>#</th><th>班級</th><th>姓名</th><th>成績</th></tr></thead>
-          <tbody>
-            ${topN.map(r=>{
-              const score = r.status==='OK' && (r.timeSec===0 || r.timeSec) ? String(r.timeSec) : r.status;
-              const rk = r.rank ?? '-';
-              return `<tr><td>${rk}</td><td>${escapeHtml(r.class)}</td><td>${escapeHtml(r.name)}</td><td>${escapeHtml(score)}</td></tr>`;
-            }).join('')}
-          </tbody>
-        </table>
-      ` : '<div class="muted">尚無成績。</div>';
-    }else{
-      leaderboard.innerHTML = '<div class="muted">尚未指定目前組次。</div>';
-    }
-  }
-}
-
-function heatHtml(h, pMap, cls){
-  return `
-    <div class="${cls}">
-      <div class="row">
-        <span class="badge">${h.grade}年級</span>
-        <span class="badge">${escapeHtml(h.event)}</span>
-        <span class="badge">${escapeHtml(h.round)}</span>
-        <span class="badge">第 ${h.heatNo} 組</span>
-      </div>
-      <div class="muted">A: ${escapeHtml(h.classA)}　B: ${escapeHtml(h.classB)}</div>
-      <div class="lanes" style="margin-top:10px">
-        ${h.lanes.map(L=>{
-          const p = L.pid ? pMap[L.pid] : null;
-          const name = p ? p.name : '（空）';
-          const c = p ? p.class : (L.cls || '');
-          return `
-            <div class="lane">
-              <div class="n">Lane ${L.lane}</div>
-              <div class="p">${escapeHtml(name)}</div>
-              <div class="c">${escapeHtml(c)}</div>
-            </div>`;
-        }).join('')}
-      </div>
-    </div>`;
-}
+const lbHint = el('lbHint');
 
 function tick(){
   const d = new Date();
@@ -82,10 +15,60 @@ function tick(){
 }
 setInterval(tick, 1000); tick();
 
+function getContext(){
+  const heats = (state.heats || []).slice().sort((a,b)=>a.createdAt-b.createdAt);
+  const curId = state.ui?.currentHeatId;
+  const cur = heats.find(h=>h.id===curId) || heats[0] || null;
+  if(!cur) return null;
+  return { grade: cur.grade, event: cur.event, round: cur.round };
+}
 
-subscribeStateUpdates(()=>{
-  state = loadState();
-  render();
-});
+function render(){
+  const ctx = getContext();
+  if(!ctx){
+    lbTitle.textContent = '尚未建立場次';
+    leaderboard.innerHTML = '<div class="muted">請先在管理端建立組次，並設為目前組次。</div>';
+    lbHint.textContent = '';
+    return;
+  }
 
+  const title = `🌟 ${ctx.grade}年級  ${ctx.event}  ${ctx.round}  即時排行榜`;
+  lbTitle.textContent = title;
+
+  const list = computeLeaderboard(state, ctx).slice(0, 10);
+  if(!list.length){
+    leaderboard.innerHTML = '<div class="muted">尚未有成績。等小朋友跑完再入分～</div>';
+    lbHint.textContent = '計分員 iPad 入分後，這裡會自動更新。';
+    return;
+  }
+  lbHint.textContent = '';
+
+  leaderboard.innerHTML = `
+    <div class="lbRow lbHead">
+      <div>#</div><div>姓名</div><div>班別</div><div>成績</div>
+    </div>
+    ${list.map(r=>{
+      const medal = r.rank===1?'🥇':(r.rank===2?'🥈':(r.rank===3?'🥉':''));
+      const time = r.status==='OK' ? (r.timeSec?.toFixed?.(2) ?? r.timeSec) : r.status;
+      return `
+        <div class="lbRow">
+          <div class="rk">${medal} ${r.rank}</div>
+          <div class="nm">${escapeHtml(r.name)}</div>
+          <div class="cl">${escapeHtml(r.class)}</div>
+          <div class="tm">${escapeHtml(String(time))}</div>
+        </div>
+      `;
+    }).join('')}
+  `;
+}
+
+function escapeHtml(s){
+  return String(s ?? '')
+    .replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;')
+    .replaceAll('"','&quot;').replaceAll("'",'&#39;');
+}
+
+subscribeStateUpdates(()=>{ state = loadState(); render(); });
 render();
+
+// RemoteSync init appended by patcher

@@ -46,3 +46,70 @@
 
 ## 新增：總分表（單一工作表）
 - 管理端可設定三個類別名稱並匯出 `總分表_YYYYMMDD.xlsx`（只有一張工作表）。
+
+
+## 6) 跨裝置同步（iPad 入分 → 電腦看板即時更新）
+本系統預設是「同一台電腦多分頁」同步（localStorage + BroadcastChannel）。
+若你要 iPad（計分員）與電腦（看板）同步，請啟用 `data/remote-sync.json`：
+
+- `enabled`: true
+- `endpoint`: Google Apps Script Web App URL
+- `room`: 本次活動代碼（例如 sportsday-2026）
+- `token`: 自訂密碼（避免外人寫入）
+- `pollMs`: 1000（建議 1000ms）
+
+### Google Apps Script 後端（最簡單）
+在 Google Drive → 新增 → Apps Script，貼上以下（存檔後部署成 Web App，存取權：任何人）：
+
+```javascript
+function json_(obj, code){
+  return ContentService
+    .createTextOutput(JSON.stringify(obj))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+function doGet(e){
+  const room = (e.parameter.room||'').trim();
+  const token = (e.parameter.token||'').trim();
+  if(!room) return json_({error:'missing room'}, 400);
+
+  const sp = PropertiesService.getScriptProperties();
+  const savedToken = sp.getProperty('TOKEN_'+room);
+  if(savedToken && token !== savedToken) return json_({error:'bad token'}, 403);
+
+  const raw = sp.getProperty('STATE_'+room) || '';
+  if(!raw) return json_({state:null}, 200);
+  return json_({state: JSON.parse(raw)}, 200);
+}
+
+function doPost(e){
+  const body = JSON.parse(e.postData.contents || '{}');
+  const room = (body.room||'').trim();
+  const token = (body.token||'').trim();
+  const state = body.state;
+
+  if(!room || !state) return json_({error:'missing room/state'}, 400);
+
+  const sp = PropertiesService.getScriptProperties();
+  const keyTok = 'TOKEN_'+room;
+  const savedToken = sp.getProperty(keyTok);
+
+  // First writer sets token
+  if(!savedToken){
+    sp.setProperty(keyTok, token || 'CHANGE_ME');
+  }else{
+    if(token !== savedToken) return json_({error:'bad token'}, 403);
+  }
+
+  sp.setProperty('STATE_'+room, JSON.stringify(state));
+  return json_({ok:true}, 200);
+}
+```
+
+## 7) iPad 計分建議用法（Lane 分工）
+- Lane1：`score.html?lane=1`
+- Lane2：`score.html?lane=2`
+- Lane3：`score.html?lane=3`
+- Lane4：`score.html?lane=4`
+
+（目前版本保留完整選擇介面；下一版可將 lane 模式做成全螢幕「一格輸入」超簡化介面。）

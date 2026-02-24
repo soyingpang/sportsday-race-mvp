@@ -3,29 +3,26 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>大螢幕看板</title>
+  <title>排行榜看板</title>
   <link rel="stylesheet" href="./assets/app.css" />
 </head>
-<body class="board">
+<body class="board cute">
   <header class="bar">
-    <div class="title">大螢幕看板</div>
+    <div class="title">🏁 即時排行榜</div>
     <div class="muted" id="clock"></div>
   </header>
 
-  <main class="boardMain">
+  <main class="boardMain onecol">
     <section class="card">
-      <h2>目前組次</h2>
-      <div id="currentHeat"></div>
-    </section>
-
-    <section class="card">
-      <h2>即時排行榜</h2>
-      <div id="leaderboard"></div>
-    </section>
-
-    <section class="card">
-      <h2>下一組預告</h2>
-      <div id="nextHeat"></div>
+      <div class="row" style="justify-content:space-between;align-items:flex-end">
+        <div>
+          <div id="lbTitle" class="lbTitle">—</div>
+          <div class="muted">Top 10（跨所有場次彙整）</div>
+        </div>
+        <div class="muted">✨ 1–2 年級親子運動日</div>
+      </div>
+      <div id="leaderboard" class="lb"></div>
+      <div id="lbHint" class="muted" style="margin-top:10px"></div>
     </section>
   </main>
 

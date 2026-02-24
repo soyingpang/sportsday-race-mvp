@@ -1,4 +1,5 @@
-import { loadState, saveState, subscribeStateUpdates } from './store.js';
+import { loadState, saveState, subscribeStateUpdates, onSave } from './store.js';
+import { RemoteSync } from './remoteSync.js';
 import { computeLeaderboard, gradeOfClass, normalizeTimeInput } from './logic.js';
 
 let state = loadState();
@@ -227,3 +228,10 @@ subscribeStateUpdates(()=>{
     renderHeatOptions();
   }
 });
+
+
+// === Remote cross-device sync (optional) ===
+(async ()=>{
+  await RemoteSync.init();
+  onSave((st)=>RemoteSync.push(st));
+})();
