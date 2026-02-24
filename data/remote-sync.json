@@ -1,6 +1,6 @@
 {
   "enabled": true,
-  "endpoint": "https://soyingpang.github.io/sportsday-race-mvp/",
+  "endpoint": "https://script.google.com/macros/s/AKfycbxKQCyeM-R8WThbq2qS7oMlKIaraKDrscUd-bJwxGmiuXIZJPn8Ec0vyYS1cESCT6wJjA/exec",
   "room": "sportsday-2026",
   "token": "111111",
   "pollMs": 1000

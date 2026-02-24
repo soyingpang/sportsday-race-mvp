@@ -6,9 +6,9 @@
   <title>計分員輸入</title>
   <link rel="stylesheet" href="./assets/app.css" />
 </head>
-<body>
+<body class="score">
   <header class="bar">
-    <div class="title">計分員輸入（徑賽）</div>
+    <div class="title" id="scoreTitle">計分員輸入（徑賽）</div>
     <nav class="nav">
       <a href="./index.html" target="_blank" rel="noopener">回管理端</a>
       <a href="./board.html" target="_blank" rel="noopener">看板</a>
@@ -16,7 +16,48 @@
   </header>
   <div id="diag" class="msg" style="padding:0 16px"></div>
 
-  <main class="grid">
+  <!-- Lane mode (for iPad, e.g. score.html?lane=1) -->
+  <main id="laneMode" class="laneMode" hidden>
+    <section class="card laneCard">
+      <div class="row" style="justify-content:space-between;align-items:flex-end">
+        <div>
+          <div class="badge bigBadge" id="laneBadge">Lane</div>
+          <div class="muted" id="laneHeatLabel">—</div>
+        </div>
+        <div class="muted">📲 iPad 線道入分</div>
+      </div>
+
+      <div class="laneWho">
+        <div class="whoName" id="laneName">—</div>
+        <div class="whoMeta" id="laneMeta">—</div>
+      </div>
+
+      <div class="laneInputRow">
+        <input id="laneTime" inputmode="decimal" placeholder="秒數（例如 9.83）" class="laneTime" />
+        <button id="btnSendOk" class="primary laneSend">送出</button>
+      </div>
+
+      <div class="laneBtns">
+        <button class="laneStatus" data-status="DNS">DNS 未出賽</button>
+        <button class="laneStatus" data-status="DNF">DNF 未完賽</button>
+        <button class="laneStatus" data-status="DQ">DQ 取消資格</button>
+        <button class="laneStatus danger" data-status="CLEAR">清除</button>
+      </div>
+
+      <div class="msg" id="laneMsg"></div>
+
+      <details style="margin-top:10px">
+        <summary class="muted">設定</summary>
+        <label style="display:flex;gap:6px;align-items:center;margin-top:8px">
+          <input type="checkbox" id="autoFollow" checked />
+          自動跟隨後台目前組次
+        </label>
+      </details>
+    </section>
+  </main>
+
+  <!-- Full mode (desktop fallback) -->
+  <main id="fullMode" class="grid">
     <section class="card span2">
       <h2>1) 選擇要入分的組次</h2>
       <div class="row">
@@ -33,26 +74,23 @@
             <option value="決賽">決賽</option>
           </select>
         </label>
-        <label style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="autoFollow" checked /> 自動跟隨看板目前組次</label>
-        <button id="btnFollowCurrent" class="primary">立即切到目前組次</button>
+        <label style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="autoFollowFull" checked /> 自動跟隨看板目前組次</label>
+        <button id="btnFollowNow">跟隨目前組次</button>
       </div>
-
       <div class="row">
         <label>組次
           <select id="selHeat"></select>
         </label>
-        <span id="pickMsg" class="muted"></span>
+        <button id="btnLoadHeat" class="primary">載入此組</button>
       </div>
+      <div id="pickMsg" class="msg"></div>
     </section>
 
     <section class="card span2">
-      <h2>2) 輸入本組成績（Lane1–4）</h2>
-      <p class="muted">時間（秒）支援小數；狀態可選 DNS/DNF/DQ；輸入即自動儲存並同步看板排行榜。</p>
+      <h2>2) Lane 1–4 成績輸入</h2>
+      <div id="heatInfo" class="muted"></div>
       <div id="laneForm"></div>
-      <div class="row">
-        <button id="btnClearHeat" class="danger">清除此組成績</button>
-        <span id="saveMsg" class="muted"></span>
-      </div>
+      <div class="msg" id="saveMsg"></div>
     </section>
   </main>
 

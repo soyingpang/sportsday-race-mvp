@@ -1,237 +1,340 @@
 import { loadState, saveState, subscribeStateUpdates, onSave } from './store.js';
 import { RemoteSync } from './remoteSync.js';
-import { computeLeaderboard, gradeOfClass, normalizeTimeInput } from './logic.js';
+import { computeLeaderboard, normalizeTimeInput } from './logic.js';
 
 let state = loadState();
 
 // === diagnostics ===
 const diagEl = document.getElementById('diag');
 function diag(t){ if(diagEl) diagEl.textContent = t || ''; }
-window.addEventListener('error', (e)=>diag('⚠️ 系統錯誤：'+(e?.message||e)));
-window.addEventListener('unhandledrejection', (e)=>diag('⚠️ 系統錯誤：'+(e?.reason?.message||e?.reason||e)));
-diag('✅ 計分頁已載入（JS OK）');
+window.addEventListener('error', (e)=>diag(`⚠️ 系統錯誤：${e.message}`));
 
+diag('✅ 系統已載入（JS OK）');
 
+// === remote sync (cross-device) ===
+await RemoteSync.init();
+onSave((st)=>RemoteSync.push(st));
+
+// === helpers ===
 const el = (id)=>document.getElementById(id);
-const selGrade = el('selGrade');
-const inpEvent = el('inpEvent');
-const selRound = el('selRound');
-const selHeat = el('selHeat');
-const pickMsg = el('pickMsg');
-const laneForm = el('laneForm');
-const saveMsg = el('saveMsg');
-const autoFollow = el('autoFollow');
+const qs = new URLSearchParams(location.search);
+const laneParam = Number(qs.get('lane') || 0);
+const laneMode = laneParam >= 1 && laneParam <= 4;
 
-function escapeHtml(s){
-  return String(s ?? '')
-    .replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;')
-    .replaceAll('"','&quot;').replaceAll("'",'&#39;');
-}
-
-function heatsFiltered(){
-  const grade = selGrade.value;
-  const event = (inpEvent.value||'').trim();
-  const round = selRound.value;
-  return (state.heats||[])
-    .filter(h=> String(h.grade)===String(grade) && String(h.event)===String(event) && String(h.round)===String(round))
-    .sort((a,b)=> (a.heatNo||0)-(b.heatNo||0) || (a.createdAt||0)-(b.createdAt||0));
-}
-
-function renderHeatOptions({preserveHeatId=null} = {}){
-  const hs = heatsFiltered();
-  const prev = preserveHeatId ?? selHeat.value;
-
-  selHeat.innerHTML = hs.map(h=>`<option value="${h.id}">第 ${h.heatNo} 組（${h.classA} vs ${h.classB}）</option>`).join('');
-  pickMsg.textContent = hs.length ? `共 ${hs.length} 組` : '（找不到符合的組次）';
-
-  // keep previous selection if still exists
-  if(prev && hs.some(h=>h.id===prev)) selHeat.value = prev;
-
-  renderLaneForm();
-}
+const laneModeRoot = el('laneMode');
+const fullModeRoot = el('fullMode');
+const scoreTitle = el('scoreTitle');
 
 function pMap(){
   return Object.fromEntries((state.participants||[]).map(p=>[p.id,p]));
 }
 
-function ensureHeatResult(heatId){
+function currentHeat(){
+  const id = state.ui?.currentHeatId;
+  return (state.heats||[]).find(h=>h.id===id) || null;
+}
+
+function ensureResultObj(heatId){
   state.results = state.results || {};
-  if(!state.results[heatId]) state.results[heatId] = {};
+  state.results[heatId] = state.results[heatId] || {};
   return state.results[heatId];
 }
 
-function renderLaneForm(){
-  const heatId = selHeat.value;
-  const heat = (state.heats||[]).find(h=>h.id===heatId);
-  if(!heat){
-    laneForm.innerHTML = '<div class="muted">請先選擇組次。</div>';
-    return;
+// === Lane mode UI ===
+function initLaneMode(){
+  if(!laneMode) return;
+  if(laneModeRoot) laneModeRoot.hidden = false;
+  if(fullModeRoot) fullModeRoot.hidden = true;
+  if(scoreTitle) scoreTitle.textContent = `📲 Lane ${laneParam} 計分`;
+
+  const laneBadge = el('laneBadge');
+  const laneHeatLabel = el('laneHeatLabel');
+  const laneName = el('laneName');
+  const laneMeta = el('laneMeta');
+  const laneTime = el('laneTime');
+  const laneMsg = el('laneMsg');
+  const btnSendOk = el('btnSendOk');
+  const autoFollow = el('autoFollow');
+
+  if(laneBadge) laneBadge.textContent = `Lane ${laneParam}`;
+
+  function setMsg(t){ if(laneMsg) laneMsg.textContent = t || ''; }
+
+  function render(){
+    const h = currentHeat();
+    const map = pMap();
+
+    if(!h){
+      if(laneHeatLabel) laneHeatLabel.textContent = '尚未指定目前組次（請後台按「設為目前組次」）';
+      if(laneName) laneName.textContent = '—';
+      if(laneMeta) laneMeta.textContent = '';
+      if(laneTime) laneTime.value = '';
+      setMsg('');
+      return;
+    }
+
+    laneHeatLabel.textContent = `${h.grade}年級 ${h.event} ${h.round} 第${h.heatNo}組`;
+
+    const laneObj = (h.lanes||[]).find(x=>Number(x.lane)===laneParam);
+    const pid = laneObj?.pid || null;
+    const p = pid ? map[pid] : null;
+
+    laneName.textContent = p ? p.name : '（空道）';
+    laneMeta.textContent = p ? `${p.class}　${p.no}號` : '';
+
+    const r = state.results?.[h.id]?.[String(laneParam)] || null;
+    if(r && r.status === 'OK' && typeof r.timeSec === 'number'){
+      laneTime.value = String(r.timeSec);
+      setMsg('✅ 已送出（OK）');
+    }else if(r && r.status && r.status !== 'OK'){
+      laneTime.value = '';
+      setMsg(`✅ 已送出（${r.status}）`);
+    }else{
+      laneTime.value = '';
+      setMsg('');
+    }
+
+    // focus for fast entry
+    setTimeout(()=>{ laneTime?.focus(); laneTime?.select?.(); }, 30);
   }
-  const pm = pMap();
-  const rHeat = ensureHeatResult(heatId);
 
-  laneForm.innerHTML = `
-    <table class="table">
-      <thead>
-        <tr>
-          <th>Lane</th><th>班級</th><th>姓名</th><th>成績(秒)</th><th>狀態</th><th>備註</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${(heat.lanes||[]).map(L=>{
-          const pid = L.pid;
-          const p = pid ? pm[pid] : null;
-          const cls = p ? p.class : (L.cls || '');
-          const name = p ? p.name : '（空）';
-          const rec = rHeat[String(L.lane)] || { pid: pid||null, timeSec: null, status:'OK', note:'' };
-          const timeVal = (rec.timeSec===0 || rec.timeSec) ? rec.timeSec : '';
-          const statusVal = (rec.status || 'OK').toUpperCase();
-          const disabled = pid ? '' : 'disabled';
-          return `
-            <tr>
-              <td>${L.lane}</td>
-              <td>${escapeHtml(cls)}</td>
-              <td>${escapeHtml(name)}</td>
-              <td><input ${disabled} data-k="time" data-lane="${L.lane}" inputmode="decimal" value="${timeVal}" placeholder="例如 12.34" /></td>
-              <td>
-                <select ${disabled} data-k="status" data-lane="${L.lane}">
-                  ${['OK','DNS','DNF','DQ'].map(s=>`<option value="${s}" ${s===statusVal?'selected':''}>${s}</option>`).join('')}
-                </select>
-              </td>
-              <td><input ${disabled} data-k="note" data-lane="${L.lane}" value="${escapeHtml(rec.note||'')}" /></td>
-            </tr>
-          `;
-        }).join('')}
-      </tbody>
-    </table>
-  `;
+  function commit({status='OK', timeSec=null}){
+    const h = currentHeat();
+    if(!h) return;
 
-  // keyboard: Enter to next input
-  laneForm.querySelectorAll('input,select').forEach((node, idx, all)=>{
-    node.addEventListener('keydown', (e)=>{
-      if(e.key === 'Enter'){
-        e.preventDefault();
-        const nxt = all[idx+1];
-        if(nxt) nxt.focus();
+    const laneObj = (h.lanes||[]).find(x=>Number(x.lane)===laneParam);
+    const pid = laneObj?.pid || null;
+
+    const slot = ensureResultObj(h.id);
+    if(status === 'CLEAR'){
+      delete slot[String(laneParam)];
+      saveState(state);
+      setMsg('已清除。');
+      render();
+      return;
+    }
+
+    if(status === 'OK'){
+      if(!pid){
+        setMsg('此線道為空，無法送出 OK 成績。');
+        return;
       }
+      if(!(typeof timeSec === 'number') || !isFinite(timeSec)){
+        setMsg('請輸入正確秒數。');
+        return;
+      }
+      slot[String(laneParam)] = { pid, timeSec, status:'OK', note:'', updatedAt: Date.now() };
+      saveState(state);
+      setMsg('✅ 已送出（OK）');
+      render();
+      return;
+    }
+
+    // DNS/DNF/DQ can be submitted even if pid is null? We'll require pid.
+    if(!pid){
+      setMsg('此線道為空，無法送出狀態。');
+      return;
+    }
+    slot[String(laneParam)] = { pid, timeSec:null, status, note:'', updatedAt: Date.now() };
+    saveState(state);
+    setMsg(`✅ 已送出（${status}）`);
+    render();
+  }
+
+  btnSendOk?.addEventListener('click', ()=>{
+    const t = normalizeTimeInput(laneTime?.value || '');
+    commit({status:'OK', timeSec: t});
+  });
+
+  laneTime?.addEventListener('keydown', (e)=>{
+    if(e.key === 'Enter'){
+      e.preventDefault();
+      const t = normalizeTimeInput(laneTime?.value || '');
+      commit({status:'OK', timeSec: t});
+    }
+  });
+
+  document.querySelectorAll('.laneStatus[data-status]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const s = btn.dataset.status;
+      if(!s) return;
+      if(s === 'CLEAR') commit({status:'CLEAR'});
+      else commit({status:s});
     });
   });
-}
 
-function persistFromForm(){
-  const heatId = selHeat.value;
-  const heat = (state.heats||[]).find(h=>h.id===heatId);
-  if(!heat) return;
+  // Auto-follow: if disabled, we do not switch heat on remote updates; we still re-render if current heat changed by user.
+  autoFollow?.addEventListener('change', ()=>{ /* no-op; read checked in onUpdate */ });
 
-  const rHeat = ensureHeatResult(heatId);
-  const pm = pMap();
-
-  // ensure each lane record carries pid
-  for(const L of (heat.lanes||[])){
-    if(!L.pid) continue;
-    if(!rHeat[String(L.lane)]) rHeat[String(L.lane)] = { pid: L.pid, timeSec:null, status:'OK', note:'' };
-    rHeat[String(L.lane)].pid = L.pid;
-  }
-
-  laneForm.querySelectorAll('[data-k]').forEach(node=>{
-    const lane = String(node.dataset.lane);
-    const k = node.dataset.k;
-    if(!rHeat[lane]) rHeat[lane] = { pid:null, timeSec:null, status:'OK', note:'' };
-
-    if(k === 'time'){
-      rHeat[lane].timeSec = normalizeTimeInput(node.value);
-      if(rHeat[lane].timeSec !== null) rHeat[lane].status = 'OK';
-    }else if(k === 'status'){
-      rHeat[lane].status = String(node.value||'OK').toUpperCase();
-      if(rHeat[lane].status !== 'OK') rHeat[lane].timeSec = null;
-    }else if(k === 'note'){
-      rHeat[lane].note = String(node.value||'');
+  subscribeStateUpdates((ev)=>{
+    const prevHeat = state.ui?.currentHeatId;
+    state = loadState();
+    const nextHeat = state.ui?.currentHeatId;
+    if(autoFollow?.checked){
+      if(prevHeat !== nextHeat) render();
+      else render(); // still refresh to reflect incoming results
+    }else{
+      // not following: only refresh results for same heat
+      render();
     }
-    rHeat[lane].updatedAt = Date.now();
   });
 
-  saveState(state);
-  saveMsg.textContent = `已儲存（${new Date().toLocaleTimeString('zh-Hant-TW',{hour12:false})}）`;
+  render();
 }
 
-laneForm.addEventListener('input', (e)=>{
-  if(e.target?.dataset?.k) persistFromForm();
-});
-laneForm.addEventListener('change', (e)=>{
-  if(e.target?.dataset?.k) persistFromForm();
-});
+// === Full mode (desktop) ===
+function initFullMode(){
+  if(laneMode) return;
+  if(laneModeRoot) laneModeRoot.hidden = true;
+  if(fullModeRoot) fullModeRoot.hidden = false;
 
-document.getElementById('btnClearHeat')?.addEventListener('click', ()=>{
-  const heatId = selHeat.value;
-  if(!heatId) return;
-  if(confirm('確定要清除此組成績？')){
-    state.results = state.results || {};
-    delete state.results[heatId];
-    saveState(state);
-    renderLaneForm();
+  const selGrade = el('selGrade');
+  const inpEvent = el('inpEvent');
+  const selRound = el('selRound');
+  const selHeat = el('selHeat');
+  const btnLoadHeat = el('btnLoadHeat');
+  const btnFollowNow = el('btnFollowNow');
+  const autoFollowFull = el('autoFollowFull');
+  const pickMsg = el('pickMsg');
+  const heatInfo = el('heatInfo');
+  const laneForm = el('laneForm');
+  const saveMsg = el('saveMsg');
+
+  const setPickMsg = (t)=>{ if(pickMsg) pickMsg.textContent = t || ''; };
+  const setSaveMsg = (t)=>{ if(saveMsg) saveMsg.textContent = t || ''; };
+
+  function heatsOfContext(){
+    const g = String(selGrade?.value || '');
+    const e = String(inpEvent?.value || '').trim();
+    const r = String(selRound?.value || '');
+    return (state.heats||[]).filter(h=>String(h.grade)===g && h.event===e && h.round===r)
+      .slice()
+      .sort((a,b)=> (a.heatNo||0)-(b.heatNo||0) || (a.createdAt||0)-(b.createdAt||0));
   }
-});
 
-function followCurrentHeat(){
-  const curId = state.ui?.currentHeatId;
-  const h = (state.heats||[]).find(x=>x.id===curId);
-  if(!h) return false;
-  selGrade.value = String(h.grade);
-  inpEvent.value = h.event;
-  selRound.value = h.round;
-  renderHeatOptions({preserveHeatId: h.id});
-  selHeat.value = h.id;
-  renderLaneForm();
-  return true;
-}
-
-document.getElementById('btnFollowCurrent')?.addEventListener('click', ()=>{
-  const curId = state.ui?.currentHeatId;
-  const h = (state.heats||[]).find(x=>x.id===curId);
-  if(!h){ pickMsg.textContent = '看板尚未指定目前組次。'; return; }
-  selGrade.value = String(h.grade);
-  inpEvent.value = h.event;
-  selRound.value = h.round;
-  if(autoFollow?.checked){
-  if(!followCurrentHeat()) renderHeatOptions();
-}else{
-  renderHeatOptions();
-}
-
-  selHeat.value = h.id;
-  renderLaneForm();
-});
-
-selGrade.addEventListener('change', renderHeatOptions);
-inpEvent.addEventListener('change', renderHeatOptions);
-selRound.addEventListener('change', renderHeatOptions);
-selHeat.addEventListener('change', renderLaneForm);
-
-if(autoFollow?.checked){
-  if(!followCurrentHeat()) renderHeatOptions();
-}else{
-  renderHeatOptions();
-}
-
-
-
-subscribeStateUpdates(()=>{
-  const follow = document.getElementById('chkFollowCurrent')?.checked;
-  const prev = document.getElementById('selHeat')?.value;
-  state = loadState();
-  if(!follow && prev){
-    renderHeatOptions();
-    document.getElementById('selHeat').value = prev;
-    renderLaneForm();
-  }else{
-    // follow current or no prev
-    renderHeatOptions();
+  function renderHeatOptions(){
+    const heats = heatsOfContext();
+    selHeat.innerHTML = heats.map(h=>`<option value="${h.id}">第${h.heatNo}組（${h.classA} vs ${h.classB}）</option>`).join('');
+    if(!heats.length) setPickMsg('此條件下尚未建立組次。');
+    else setPickMsg('');
   }
-});
 
+  function renderLaneForm(heatId){
+    const h = (state.heats||[]).find(x=>x.id===heatId);
+    if(!h){ laneForm.innerHTML=''; heatInfo.textContent=''; return; }
 
-// === Remote cross-device sync (optional) ===
-(async ()=>{
-  await RemoteSync.init();
-  onSave((st)=>RemoteSync.push(st));
-})();
+    heatInfo.textContent = `${h.grade}年級 ${h.event} ${h.round} 第${h.heatNo}組（A:${h.classA} / B:${h.classB}）`;
+
+    const map = pMap();
+    const slot = ensureResultObj(h.id);
+
+    const rows = (h.lanes||[]).slice().sort((a,b)=>(a.lane||0)-(b.lane||0)).map(L=>{
+      const p = L.pid ? map[L.pid] : null;
+      const r = slot[String(L.lane)] || null;
+      const timeVal = r && r.status==='OK' && typeof r.timeSec==='number' ? r.timeSec : '';
+      const statusVal = r ? r.status : 'OK';
+      return `
+        <tr>
+          <td>Lane ${L.lane}</td>
+          <td>${p?`${p.class}`:(L.cls||'')}</td>
+          <td>${p?`${p.no}. ${p.name}`:'（空）'}</td>
+          <td><input data-k="time" data-lane="${L.lane}" value="${timeVal}" inputmode="decimal" placeholder="秒" style="width:110px"></td>
+          <td>
+            <select data-k="status" data-lane="${L.lane}">
+              ${['OK','DNS','DNF','DQ'].map(s=>`<option value="${s}" ${s===statusVal?'selected':''}>${s}</option>`).join('')}
+            </select>
+          </td>
+          <td><input data-k="note" data-lane="${L.lane}" value="${r?.note||''}" placeholder="備註" style="width:180px"></td>
+        </tr>`;
+    }).join('');
+
+    laneForm.innerHTML = `
+      <table class="table">
+        <thead><tr><th>線道</th><th>班別</th><th>選手</th><th>成績</th><th>狀態</th><th>備註</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>`;
+  }
+
+  function bindLaneInputs(heatId){
+    laneForm.querySelectorAll('input,select').forEach(node=>{
+      node.addEventListener('change', ()=>{
+        const lane = String(node.dataset.lane||'');
+        const k = node.dataset.k;
+        const h = (state.heats||[]).find(x=>x.id===heatId);
+        if(!h) return;
+
+        const map = pMap();
+        const laneObj = (h.lanes||[]).find(x=>String(x.lane)===lane);
+        const pid = laneObj?.pid || null;
+        if(!pid){ setSaveMsg('空道不需入分。'); return; }
+
+        const slot = ensureResultObj(h.id);
+        const cur = slot[lane] || { pid, status:'OK', timeSec:null, note:'', updatedAt: Date.now() };
+        cur.pid = pid;
+
+        if(k==='time'){
+          cur.timeSec = normalizeTimeInput(node.value);
+        }else if(k==='status'){
+          cur.status = node.value;
+          if(cur.status !== 'OK') cur.timeSec = null;
+        }else if(k==='note'){
+          cur.note = node.value;
+        }
+        cur.updatedAt = Date.now();
+        slot[lane] = cur;
+        saveState(state);
+        setSaveMsg(`已儲存：Lane ${lane}`);
+      });
+    });
+  }
+
+  function loadSelectedHeat(){
+    const id = selHeat.value;
+    if(!id){ setPickMsg('請選擇組次。'); return; }
+    renderLaneForm(id);
+    bindLaneInputs(id);
+  }
+
+  btnLoadHeat?.addEventListener('click', loadSelectedHeat);
+  btnFollowNow?.addEventListener('click', ()=>{
+    const cur = currentHeat();
+    if(!cur){ setPickMsg('尚未指定目前組次。'); return; }
+    selGrade.value = String(cur.grade);
+    inpEvent.value = cur.event;
+    selRound.value = cur.round;
+    renderHeatOptions();
+    selHeat.value = cur.id;
+    loadSelectedHeat();
+  });
+
+  [selGrade, inpEvent, selRound].forEach(n=>n?.addEventListener('change', renderHeatOptions));
+  inpEvent?.addEventListener('input', ()=>{ /* no auto */ });
+
+  subscribeStateUpdates(()=>{
+    const prev = state.ui?.currentHeatId;
+    state = loadState();
+    renderHeatOptions();
+    if(autoFollowFull?.checked){
+      const cur = currentHeat();
+      if(cur && prev !== cur.id){
+        selHeat.value = cur.id;
+        loadSelectedHeat();
+      }
+    }
+  });
+
+  renderHeatOptions();
+  // auto load current heat if exists
+  const cur = currentHeat();
+  if(cur){
+    selGrade.value = String(cur.grade);
+    inpEvent.value = cur.event;
+    selRound.value = cur.round;
+    renderHeatOptions();
+    selHeat.value = cur.id;
+    loadSelectedHeat();
+  }
+}
+
+initLaneMode();
+initFullMode();

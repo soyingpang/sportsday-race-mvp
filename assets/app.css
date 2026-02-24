@@ -67,3 +67,26 @@ body.cute{ background: radial-gradient(1200px 600px at 10% 0%, rgba(47,129,247,.
   .nm{ font-size:18px; }
   .tm{ font-size:18px; }
 }
+
+
+/* === Score lane mode (iPad) === */
+.score .laneMode{padding:14px}
+.laneCard{max-width:820px;margin:0 auto}
+.bigBadge{font-size:18px;padding:6px 14px}
+.laneWho{margin:14px 0;padding:12px;border:1px dashed var(--line);border-radius:16px;background:#0f1620}
+.whoName{font-size:34px;font-weight:900;letter-spacing:.5px}
+.whoMeta{margin-top:6px;color:var(--muted);font-size:18px}
+.laneInputRow{display:flex;gap:10px;align-items:stretch;margin-top:12px}
+.laneTime{flex:1;font-size:26px;padding:16px 16px;border-radius:16px}
+.laneSend{font-size:20px;padding:16px 18px;border-radius:16px}
+.laneBtns{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
+.laneStatus{font-size:18px;padding:14px 12px;border-radius:16px}
+@media (max-width:520px){
+  .laneBtns{grid-template-columns:1fr}
+  .whoName{font-size:28px}
+}
+
+/* === Cute board tweaks === */
+.board.cute .card{border-radius:24px}
+.board.cute .lbTitle{font-size:28px;font-weight:900}
+.board.cute .lb .rowItem{border-radius:18px}
