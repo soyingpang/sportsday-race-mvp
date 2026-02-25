@@ -45,7 +45,133 @@ btnExportLane?.addEventListener('click', ()=>{
 });
 btnExportResults?.addEventListener('click', ()=>{
   exportResultsCSV(state);
-});function byId(arr){ return Object.fromEntries(arr.map(x=>[x.id,x])); }
+});
+
+// === Create schedule (one-click) ===
+btnBuildAll?.addEventListener('click', ()=>{
+  try{
+    const event = inpEvent?.value || '徑賽';
+    const fillStrategy = selFill?.value || 'keep'; // keep | other
+    const round = '預賽';
+    const rebuild = chkRebuild ? !!chkRebuild.checked : true;
+
+    const {heats, msg} = buildHeatsFromRoster({ event, round, fillStrategy });
+
+    if(!heats.length){
+      setMsg(createMsg, '⚠️ 無法建立：名單不足或未匯入。');
+      return;
+    }
+
+    if(rebuild){
+      // Clear all heats/results for selected event (simple & safe for one-off day)
+      const keepHeats = state.heats.filter(h=>h.event !== event);
+      state.heats = keepHeats.concat(heats);
+      // Remove results for removed heats
+      const keepIds = new Set(state.heats.map(h=>h.id));
+      const nextResults = {};
+      for(const [hid, r] of Object.entries(state.results||{})){
+        if(keepIds.has(hid)) nextResults[hid] = r;
+      }
+      state.results = nextResults;
+    }else{
+      state.heats = state.heats.concat(heats);
+    }
+
+    // Set current heat if none
+    if(!state.ui.currentHeatId && state.heats.length){
+      state.ui.currentHeatId = state.heats[0].id;
+    }
+    state.updatedAt = Date.now();
+    saveState(state);
+
+    setMsg(createMsg, '✅ 已建立：' + msg);
+    renderAll();
+  }catch(err){
+    console.error(err);
+    setMsg(createMsg, '⚠️ 建立失敗：' + (err?.message || err));
+  }
+});
+
+function buildHeatsFromRoster({event, round, fillStrategy}){
+  const roster = (state.participants||[]).filter(p=>p.present);
+  if(!roster.length) return {heats:[], msg:'名單為空'};
+
+  // group by grade -> class
+  const gradeMap = new Map(); // grade -> Map(class -> participants[])
+  for(const p of roster){
+    const g = gradeOfClass(p.class);
+    if(!g) continue;
+    if(!gradeMap.has(g)) gradeMap.set(g, new Map());
+    const cm = gradeMap.get(g);
+    if(!cm.has(p.class)) cm.set(p.class, []);
+    cm.get(p.class).push(p);
+  }
+  // stable order in each class: by no then id
+  for(const cm of gradeMap.values()){
+    for(const [cls, arr] of cm.entries()){
+      arr.sort((a,b)=>(a.no-b.no) || String(a.id).localeCompare(String(b.id)));
+      cm.set(cls, arr);
+    }
+  }
+
+  const heats = [];
+  const now = Date.now();
+  let createdSeq = 0;
+  const grades = Array.from(gradeMap.keys()).sort((a,b)=>Number(a)-Number(b));
+
+  for(const grade of grades){
+    const cm = gradeMap.get(grade);
+    const classes = Array.from(cm.keys()).sort((a,b)=>a.localeCompare(b,'zh-Hant'));
+    // pair classes: (A,B), (C,D)... by suffix order; fallback to sequential if unknown
+    const parsed = classes.map(cls=>{
+      const m = String(cls).match(/^(\d+)(.*)$/);
+      return {cls, g:m?m[1]:'', suf:(m?m[2]:'')};
+    }).sort((a,b)=>{
+      if(a.g!==b.g) return Number(a.g)-Number(b.g);
+      return String(a.suf).localeCompare(String(b.suf),'zh-Hant');
+    });
+
+    const pairs = [];
+    for(let i=0;i<parsed.length;i+=2){
+      const A = parsed[i]?.cls || '';
+      const B = parsed[i+1]?.cls || '';
+      if(!A) continue;
+      pairs.push([A,B]);
+    }
+
+    let heatNo = 1;
+    for(const [classA, classB] of pairs){
+      const listA = cm.get(classA) || [];
+      const listB = classB ? (cm.get(classB) || []) : [];
+      const need = Math.max(Math.ceil(listA.length/2), Math.ceil(listB.length/2), 1);
+
+      for(let k=0;k<need;k++){
+        const pickedA = listA.slice(k*2, k*2+2).map(x=>x.id);
+        const pickedB = listB.slice(k*2, k*2+2).map(x=>x.id);
+        const lanes = laneAssign({ classA, classB: (classB||''), pickedA, pickedB, fillStrategy });
+        const h = {
+          grade,
+          event,
+          round,
+          heatNo,
+          classA,
+          classB: (classB||''),
+          lanes,
+          locked: false,
+          createdAt: now + (createdSeq++)
+        };
+        h.id = makeHeatId(h);
+        heats.push(h);
+        heatNo++;
+      }
+    }
+  }
+
+  const msg = `${heats.length} 組（${grades.length} 個年級）`;
+  return {heats, msg};
+}
+
+function byId(arr){ return Object.fromEntries(arr.map(x=>[x.id,x])); }
 
 function renderParticipantsSummary(){
   if(!state.participants.length){
