@@ -1,7 +1,7 @@
 import { loadState, saveState, resetState, subscribeStateUpdates, onSave } from './store.js';
+import { exportTotalScoreSheet, exportHeatScoreSheet, exportAllHeatsHandwriteOneSheet } from './export.js';
 import { RemoteSync } from './remoteSync.js';
 import { parseCsv, gradeOfClass, laneAssign, makeHeatId } from './logic.js';
-import { exportTotalScoreSheet, exportBackupJSON, exportHandScoreSheet } from './export.js';
 let state = loadState();
 
 // === diagnostics ===
@@ -26,6 +26,7 @@ const selGrade = el('selGrade');
 const selClassA = el('selClassA');
 const selClassB = el('selClassB');
 const inpEvent = el('inpEvent');
+const selRound = el('selRound');
 const inpHeatNo = el('inpHeatNo');
 const pickA = el('pickA');
 const pickB = el('pickB');
@@ -37,10 +38,10 @@ const heatsList = el('heatsList');
 const cat1 = el('cat1');
 const cat2 = el('cat2');
 const cat3 = el('cat3');
-const heatsOverview = el('heatsOverview');
-const btnExportBackup = el('btnExportBackup');
 const btnExportTotal = el('btnExportTotal');
-const btnExportHand = el('btnExportHand');
+const exportMsg = el('exportMsg');
+const btnExportHeatsOneSheet = el('btnExportHeatsOneSheet');
+const heatsOverview = el('heatsOverview');
 
 function setMsg(node, text){ node.textContent = text || ''; }
 
@@ -61,22 +62,34 @@ cat1?.addEventListener('change', saveCategoriesFromUI);
 cat2?.addEventListener('change', saveCategoriesFromUI);
 cat3?.addEventListener('change', saveCategoriesFromUI);
 
-
-btnExportBackup?.addEventListener('click', ()=>{
-  exportBackupJSON(state);
-});
-
 btnExportTotal?.addEventListener('click', ()=>{
-  if(!state.participants?.length) return;
+  if(!state.participants?.length){
+    exportMsg.textContent = '請先匯入名單。';
+    return;
+  }
   saveCategoriesFromUI();
-  exportTotalScoreSheet(state);
+  try{
+    exportTotalScoreSheet(state);
+    exportMsg.textContent = '已匯出：總分表（單一工作表）';
+  }catch(e){
+    exportMsg.textContent = '匯出失敗：' + (e?.message || e);
+    throw e;
+  }
 });
 
-btnExportHand?.addEventListener('click', ()=>{
-  if(!state.heats?.length) return;
-  exportHandScoreSheet(state);
+btnExportHeatsOneSheet?.addEventListener('click', ()=>{
+  if(!state.heats?.length){
+    exportMsg.textContent = '尚未建立任何場次。';
+    return;
+  }
+  try{
+    exportAllHeatsHandwriteOneSheet(state, {sheetName:'場次手寫計分表'});
+    exportMsg.textContent = '已匯出：場次手寫計分表（單一工作表）';
+  }catch(e){
+    exportMsg.textContent = '匯出失敗：' + (e?.message || e);
+    throw e;
+  }
 });
-
 function byId(arr){ return Object.fromEntries(arr.map(x=>[x.id,x])); }
 
 function classesOfGrade(grade){
@@ -185,7 +198,7 @@ function renderHeatsOverview(pMap){
       <thead>
         <tr>
           <th>看板</th>
-          <th>年級</th><th>項目</th><th>組次</th><th>A班</th><th>B班</th>
+          <th>年級</th><th>項目</th><th>輪次</th><th>組次</th><th>A班</th><th>B班</th>
           <th>Lane1</th><th>Lane2</th><th>Lane3</th><th>Lane4</th>
         </tr>
       </thead>
@@ -203,7 +216,8 @@ function renderHeatsOverview(pMap){
               <td><button data-act="setCurrent" data-id="${h.id}">${isCurrent?'✅':'設為'}</button></td>
               <td>${h.grade}</td>
               <td>${escapeHtml(h.event)}</td>
-<td>${h.heatNo}</td>
+              <td>${escapeHtml(h.round)}</td>
+              <td>${h.heatNo}</td>
               <td>${escapeHtml(h.classA)}</td>
               <td>${escapeHtml(h.classB)}</td>
               <td>${laneCell(h.lanes[0])}</td>
@@ -214,7 +228,7 @@ function renderHeatsOverview(pMap){
         }).join('')}
       </tbody>
     </table>
-    <div class="muted">提示：此表為「全部分組一次顯示」。看板目前組次只在此處切換：點第一欄「設為/✅」。</div>
+    <div class="muted">提示：此表為「全部分組一次顯示」。點第一欄可快速切換看板目前組次。</div>
   `;
   heatsOverview.innerHTML = head;
   heatsOverview.querySelectorAll('button[data-act="setCurrent"]').forEach(btn=>{
@@ -261,10 +275,11 @@ function renderHeats(){
               <span class="badge">${escapeHtml(h.round)}</span>
               <span class="badge">第 ${h.heatNo} 組</span>
               ${h.locked ? '<span class="badge">已鎖定</span>' : ''}
-              ${isCurrent ? '<span class="badge">看板顯示中</span>' : '<span class="muted">（切換看板請用上方總覽第一欄）</span>'}
+              ${isCurrent ? '<span class="badge">看板顯示中</span>' : ''}
             </div>
             <div class="row">
-              
+              <button data-act="setCurrent" data-id="${h.id}">設為目前組次</button>
+              <button data-act="export" data-id="${h.id}">匯出計分表</button>
               <button data-act="toggleLock" data-id="${h.id}">${h.locked?'解鎖':'鎖定'}</button>
               <button data-act="reseed" data-id="${h.id}" ${h.locked?'disabled':''}>重排</button>
               <button data-act="del" data-id="${h.id}" class="danger">刪除</button>
@@ -287,6 +302,10 @@ function renderHeats(){
         state.ui.currentHeatId = id;
         saveState(state);
         renderHeats();
+        return;
+      }
+      if(act === 'export'){
+        exportHeatScoreSheet(state.heats[idx], state.participants);
         return;
       }
       if(act === 'toggleLock'){
@@ -410,7 +429,7 @@ function createHeats({all}){
   const pickedBAll = sortByNo(pickedBAllRaw);
 
   const event = (inpEvent.value || '60m').trim();
-  const round = "";
+  const round = selRound.value;
   const startHeatNo = Number(inpHeatNo.value || 1);
 
   const chunk2 = (arr)=>{
@@ -468,25 +487,10 @@ function renderAll(){
   renderHeats();
 }
 
-// === init ===
+renderAll();
+
+// === Remote cross-device sync (optional) ===
 (async ()=>{
-  // 若未載入任何名單，預設自動載入既定名單（data/participants.sample.csv）
-  if(!state.participants?.length){
-    try{
-      const res = await fetch('./data/participants.sample.csv', {cache:'no-store'});
-      if(res.ok){
-        const csvText = await res.text();
-        importCsvText(csvText);
-        setMsg(importMsg, '已自動載入既定名單（範例名單）。');
-      }
-    }catch(e){
-      // ignore: 仍可手動匯入
-    }
-  }
-
-  renderAll();
-
-  // === Remote cross-device sync (optional) ===
   await RemoteSync.init();
   onSave((st)=>RemoteSync.push(st));
 })();

@@ -1,6 +1,6 @@
 import { loadState, saveState, subscribeStateUpdates, onSave } from './store.js';
 import { RemoteSync } from './remoteSync.js';
-import { computeLeaderboard, normalizeTimeInput, parseCsv } from './logic.js';
+import { computeLeaderboard, normalizeTimeInput } from './logic.js';
 
 let state = loadState();
 
@@ -11,29 +11,6 @@ window.addEventListener('error', (e)=>diag(`⚠️ 系統錯誤：${e.message}`)
 
 diag('✅ 系統已載入（JS OK）');
 
-// admin quick controls
-if(adminMode){
-  const bar = document.createElement('div');
-  bar.className='adminQuick';
-  bar.innerHTML = `<button id="btnNextHeat" class="primary">下一場 ▶</button> <span class="muted" id="nextHint"></span>`;
-  document.body.insertBefore(bar, document.body.firstChild.nextSibling);
-  bar.querySelector('#btnNextHeat').addEventListener('click', ()=>{ gotoNextHeat(); render(); });
-}
-
-
-// 若未載入任何名單，預設自動載入既定名單（data/participants.sample.csv）
-if(!state.participants?.length){
-  try{
-    const res = await fetch('./data/participants.sample.csv', {cache:'no-store'});
-    if(res.ok){
-      const csvText = await res.text();
-      const parsed = parseCsv(csvText);
-      state.participants = parsed;
-      saveState(state);
-    }
-  }catch(e){ /* ignore */ }
-}
-
 // === remote sync (cross-device) ===
 await RemoteSync.init();
 onSave((st)=>RemoteSync.push(st));
@@ -42,30 +19,7 @@ onSave((st)=>RemoteSync.push(st));
 const el = (id)=>document.getElementById(id);
 const qs = new URLSearchParams(location.search);
 const laneParam = Number(qs.get('lane') || 0);
-const adminMode = qs.get('admin') === '1' || location.pathname.endsWith('admin.html');
 const laneMode = laneParam >= 1 && laneParam <= 4;
-
-
-// === navigation: next heat ===
-function getHeatOrder(){
-  // order by event name then heatNo
-  const heats = (state.heats||[]).slice();
-  heats.sort((a,b)=>{
-    if(a.event!==b.event) return String(a.event).localeCompare(String(b.event),'zh-Hant');
-    return (a.heatNo||0)-(b.heatNo||0);
-  });
-  return heats;
-}
-function gotoNextHeat(){
-  const order = getHeatOrder();
-  if(!order.length) return;
-  const curId = state.currentHeatId || order[0].id;
-  const idx = Math.max(0, order.findIndex(h=>h.id===curId));
-  const next = order[Math.min(order.length-1, idx+1)];
-  state.currentHeatId = next.id;
-  saveState(state);
-}
-
 
 const laneModeRoot = el('laneMode');
 const fullModeRoot = el('fullMode');
@@ -236,6 +190,7 @@ function initFullMode(){
 
   const selGrade = el('selGrade');
   const inpEvent = el('inpEvent');
+  const selRound = el('selRound');
   const selHeat = el('selHeat');
   const btnLoadHeat = el('btnLoadHeat');
   const btnFollowNow = el('btnFollowNow');
@@ -251,7 +206,8 @@ function initFullMode(){
   function heatsOfContext(){
     const g = String(selGrade?.value || '');
     const e = String(inpEvent?.value || '').trim();
-    return (state.heats||[]).filter(h=>String(h.grade)===g && h.event===e)
+    const r = String(selRound?.value || '');
+    return (state.heats||[]).filter(h=>String(h.grade)===g && h.event===e && h.round===r)
       .slice()
       .sort((a,b)=> (a.heatNo||0)-(b.heatNo||0) || (a.createdAt||0)-(b.createdAt||0));
   }
@@ -345,13 +301,13 @@ function initFullMode(){
     if(!cur){ setPickMsg('尚未指定目前組次。'); return; }
     selGrade.value = String(cur.grade);
     inpEvent.value = cur.event;
-    "" = cur.round;
+    selRound.value = cur.round;
     renderHeatOptions();
     selHeat.value = cur.id;
     loadSelectedHeat();
   });
 
-  [selGrade, inpEvent].forEach(n=>n?.addEventListener('change', renderHeatOptions));
+  [selGrade, inpEvent, selRound].forEach(n=>n?.addEventListener('change', renderHeatOptions));
   inpEvent?.addEventListener('input', ()=>{ /* no auto */ });
 
   subscribeStateUpdates(()=>{
@@ -373,7 +329,7 @@ function initFullMode(){
   if(cur){
     selGrade.value = String(cur.grade);
     inpEvent.value = cur.event;
-    "" = cur.round;
+    selRound.value = cur.round;
     renderHeatOptions();
     selHeat.value = cur.id;
     loadSelectedHeat();
