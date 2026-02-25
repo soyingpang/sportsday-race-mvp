@@ -1,5 +1,6 @@
-import { loadState, subscribeStateUpdates } from './store.js';
+import { loadState, subscribeStateUpdates, onSave } from './store.js';
 import { computeLeaderboard } from './logic.js';
+import { RemoteSync } from './remoteSync.js';
 
 let state = loadState();
 const el = (id)=>document.getElementById(id);
@@ -14,6 +15,11 @@ function tick(){
   clock.textContent = d.toLocaleString('zh-Hant-TW', { hour12:false });
 }
 setInterval(tick, 1000); tick();
+
+// === remote sync (cross-device) ===
+await RemoteSync.init();
+onSave((st)=>RemoteSync.push(st));
+
 
 function getContext(){
   const heats = (state.heats || []).slice().sort((a,b)=>a.createdAt-b.createdAt);
@@ -71,4 +77,3 @@ function escapeHtml(s){
 subscribeStateUpdates(()=>{ state = loadState(); render(); });
 render();
 
-// RemoteSync init appended by patcher
