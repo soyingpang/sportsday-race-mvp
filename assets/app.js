@@ -1,5 +1,6 @@
-import { loadState, saveState, resetState, subscribeStateUpdates } from './store.js';
+import { loadState, saveState, resetState, subscribeStateUpdates, onSave } from './store.js';
 import { exportTotalScoreSheet, exportHeatScoreSheet, exportAllHeatsHandwriteOneSheet } from './export.js';
+import { RemoteSync } from './remoteSync.js';
 import { parseCsv, gradeOfClass, laneAssign, makeHeatId } from './logic.js';
 let state = loadState();
 

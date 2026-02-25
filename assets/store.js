@@ -42,7 +42,7 @@ export function loadState(){
 export function saveState(state, {broadcast=true, runHooks=true} = {}){
   state.updatedAt = Date.now();
   localStorage.setItem(KEY, JSON.stringify(state));
-  if(broadcast) bc.postMessage({type:'STATE_UPDATED', updatedAt: state.updatedAt});
+  if(broadcast && bc) bc.postMessage({type:'STATE_UPDATED', updatedAt: state.updatedAt});
   if(runHooks){
     for(const fn of saveHooks){
       try{ fn(state); }catch(e){ console.warn('onSave hook fail', e); }
@@ -55,12 +55,12 @@ export function resetState(){
   saveState(defaultState());
 }
 
-export const bc = new BroadcastChannel(CH);
+export const bc = (typeof BroadcastChannel !== 'undefined') ? new BroadcastChannel(CH) : null;
 
 
 export function subscribeStateUpdates(onUpdate){
   // BroadcastChannel for same-origin tabs; storage event as fallback.
-  bc.onmessage = (ev)=>{
+  if(bc) bc.onmessage = (ev)=>{
     if(ev?.data?.type === 'STATE_UPDATED') onUpdate?.(ev.data);
   };
   window.addEventListener('storage', (e)=>{
