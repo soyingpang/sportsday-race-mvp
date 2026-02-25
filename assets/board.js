@@ -1,4 +1,4 @@
-import { loadState, saveState, subscribeStateUpdates, onSave } from './store.js';
+import { loadState, subscribeStateUpdates, onSave } from './store.js';
 import { computeLeaderboard, parseCsv } from './logic.js';
 import { RemoteSync } from './remoteSync.js';
 
@@ -35,16 +35,9 @@ onSave((st)=>RemoteSync.push(st));
 
 
 function getContext(){
-  const heats = (state.heats || []).slice().sort((a,b)=>(a.createdAt||0)-(b.createdAt||0));
-  state.ui = state.ui || {};
-  const curId = state.ui.currentHeatId;
-  let cur = heats.find(h=>h.id===curId) || null;
-  if(!cur && heats[0]){
-    // UX：尚未指定目前組次時，自動以第一組作為目前組次
-    state.ui.currentHeatId = heats[0].id;
-    saveState(state);
-    cur = heats[0];
-  }
+  const heats = (state.heats || []).slice().sort((a,b)=>a.createdAt-b.createdAt);
+  const curId = state.ui?.currentHeatId;
+  const cur = heats.find(h=>h.id===curId) || heats[0] || null;
   if(!cur) return null;
   return { grade: cur.grade, event: cur.event };
 }
