@@ -1,5 +1,5 @@
 import { loadState, subscribeStateUpdates, onSave } from './store.js';
-import { computeLeaderboard } from './logic.js';
+import { computeLeaderboard, parseCsv } from './logic.js';
 import { RemoteSync } from './remoteSync.js';
 
 let state = loadState();
@@ -16,6 +16,19 @@ function tick(){
 }
 setInterval(tick, 1000); tick();
 
+// 若未載入任何名單，預設自動載入既定名單（data/participants.sample.csv）
+if(!state.participants?.length){
+  try{
+    const res = await fetch('./data/participants.sample.csv', {cache:'no-store'});
+    if(res.ok){
+      const csvText = await res.text();
+      state.participants = parseCsv(csvText);
+      // board 端不主動寫回 Remote，僅寫入本機以便顯示
+      localStorage.setItem('sportsday_state_v1', JSON.stringify(state));
+    }
+  }catch(e){ /* ignore */ }
+}
+
 // === remote sync (cross-device) ===
 await RemoteSync.init();
 onSave((st)=>RemoteSync.push(st));
@@ -26,7 +39,7 @@ function getContext(){
   const curId = state.ui?.currentHeatId;
   const cur = heats.find(h=>h.id===curId) || heats[0] || null;
   if(!cur) return null;
-  return { grade: cur.grade, event: cur.event, round: cur.round };
+  return { grade: cur.grade, event: cur.event };
 }
 
 function render(){
@@ -38,7 +51,7 @@ function render(){
     return;
   }
 
-  const title = `🌟 ${ctx.grade}年級  ${ctx.event}  ${ctx.round}  即時排行榜`;
+  const title = `🌟 ${ctx.grade}年級  ${ctx.event}    即時排行榜`;
   lbTitle.textContent = title;
 
   const list = computeLeaderboard(state, ctx).slice(0, 10);

@@ -1,6 +1,6 @@
 import { loadState, saveState, subscribeStateUpdates, onSave } from './store.js';
 import { RemoteSync } from './remoteSync.js';
-import { computeLeaderboard, normalizeTimeInput } from './logic.js';
+import { computeLeaderboard, normalizeTimeInput, parseCsv } from './logic.js';
 
 let state = loadState();
 
@@ -10,6 +10,19 @@ function diag(t){ if(diagEl) diagEl.textContent = t || ''; }
 window.addEventListener('error', (e)=>diag(`⚠️ 系統錯誤：${e.message}`));
 
 diag('✅ 系統已載入（JS OK）');
+
+// 若未載入任何名單，預設自動載入既定名單（data/participants.sample.csv）
+if(!state.participants?.length){
+  try{
+    const res = await fetch('./data/participants.sample.csv', {cache:'no-store'});
+    if(res.ok){
+      const csvText = await res.text();
+      const parsed = parseCsv(csvText);
+      state.participants = parsed;
+      saveState(state);
+    }
+  }catch(e){ /* ignore */ }
+}
 
 // === remote sync (cross-device) ===
 await RemoteSync.init();
@@ -190,7 +203,6 @@ function initFullMode(){
 
   const selGrade = el('selGrade');
   const inpEvent = el('inpEvent');
-  const selRound = el('selRound');
   const selHeat = el('selHeat');
   const btnLoadHeat = el('btnLoadHeat');
   const btnFollowNow = el('btnFollowNow');
@@ -206,8 +218,7 @@ function initFullMode(){
   function heatsOfContext(){
     const g = String(selGrade?.value || '');
     const e = String(inpEvent?.value || '').trim();
-    const r = String(selRound?.value || '');
-    return (state.heats||[]).filter(h=>String(h.grade)===g && h.event===e && h.round===r)
+    return (state.heats||[]).filter(h=>String(h.grade)===g && h.event===e)
       .slice()
       .sort((a,b)=> (a.heatNo||0)-(b.heatNo||0) || (a.createdAt||0)-(b.createdAt||0));
   }
@@ -301,13 +312,13 @@ function initFullMode(){
     if(!cur){ setPickMsg('尚未指定目前組次。'); return; }
     selGrade.value = String(cur.grade);
     inpEvent.value = cur.event;
-    selRound.value = cur.round;
+    "" = cur.round;
     renderHeatOptions();
     selHeat.value = cur.id;
     loadSelectedHeat();
   });
 
-  [selGrade, inpEvent, selRound].forEach(n=>n?.addEventListener('change', renderHeatOptions));
+  [selGrade, inpEvent].forEach(n=>n?.addEventListener('change', renderHeatOptions));
   inpEvent?.addEventListener('input', ()=>{ /* no auto */ });
 
   subscribeStateUpdates(()=>{
@@ -329,7 +340,7 @@ function initFullMode(){
   if(cur){
     selGrade.value = String(cur.grade);
     inpEvent.value = cur.event;
-    selRound.value = cur.round;
+    "" = cur.round;
     renderHeatOptions();
     selHeat.value = cur.id;
     loadSelectedHeat();

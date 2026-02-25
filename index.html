@@ -19,17 +19,22 @@
 
   <main class="grid">
     <section class="card">
-      <h2>1) 匯入參賽名單（CSV）</h2>
-      <p class="muted">欄位：id,class,no,name,present（present 允許 true/false 或 1/0）</p>
-      <div class="row">
-        <input type="file" id="fileCsv" accept=".csv,text/csv" />
-        <button id="btnLoadSample">載入範例名單</button>
-      </div>
-      <div id="importMsg" class="msg"></div>
+      <h2>1) 參賽名單（已鎖定：範例名單）</h2>
+      <p class="muted">本次活動使用既定名單，第一次開啟會自動載入並永久保存在此裝置。</p>
 
       <details>
-        <summary>名單概覽</summary>
-        <div id="participantsSummary" class="mono" style="margin-top:8px"></div>
+        <summary>（可選）更換名單 / 重新匯入</summary>
+        <p class="muted">欄位：id,class,no,name,present（present 允許 true/false 或 1/0）</p>
+        <div class="row">
+          <input type="file" id="fileCsv" accept=".csv,text/csv" />
+          <button id="btnLoadSample">載入範例名單</button>
+        </div>
+        <div id="importMsg" class="msg"></div>
+
+        <details>
+          <summary>名單概覽</summary>
+          <div id="participantsSummary" class="mono"></div>
+        </details>
       </details>
     </section>
 
@@ -51,13 +56,7 @@
             <option value="穿越時光隧道">穿越時光隧道</option>
           </select>
         </label>
-        <label>輪次
-          <select id="selRound">
-            <option value="初賽">初賽</option>
-            <option value="決賽">決賽</option>
-          </select>
-        </label>
-        <label>起始組次 <input id="inpHeatNo" type="number" min="1" value="1" /></label>
+<label>起始組次 <input id="inpHeatNo" type="number" min="1" value="1" /></label>
       </div>
 
       <div class="row">

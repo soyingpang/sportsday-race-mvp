@@ -26,7 +26,6 @@ const selGrade = el('selGrade');
 const selClassA = el('selClassA');
 const selClassB = el('selClassB');
 const inpEvent = el('inpEvent');
-const selRound = el('selRound');
 const inpHeatNo = el('inpHeatNo');
 const pickA = el('pickA');
 const pickB = el('pickB');
@@ -198,7 +197,7 @@ function renderHeatsOverview(pMap){
       <thead>
         <tr>
           <th>看板</th>
-          <th>年級</th><th>項目</th><th>輪次</th><th>組次</th><th>A班</th><th>B班</th>
+          <th>年級</th><th>項目</th><th>組次</th><th>A班</th><th>B班</th>
           <th>Lane1</th><th>Lane2</th><th>Lane3</th><th>Lane4</th>
         </tr>
       </thead>
@@ -216,8 +215,7 @@ function renderHeatsOverview(pMap){
               <td><button data-act="setCurrent" data-id="${h.id}">${isCurrent?'✅':'設為'}</button></td>
               <td>${h.grade}</td>
               <td>${escapeHtml(h.event)}</td>
-              <td>${escapeHtml(h.round)}</td>
-              <td>${h.heatNo}</td>
+<td>${h.heatNo}</td>
               <td>${escapeHtml(h.classA)}</td>
               <td>${escapeHtml(h.classB)}</td>
               <td>${laneCell(h.lanes[0])}</td>
@@ -428,7 +426,7 @@ function createHeats({all}){
   const pickedBAll = sortByNo(pickedBAllRaw);
 
   const event = (inpEvent.value || '60m').trim();
-  const round = selRound.value;
+  const round = "";
   const startHeatNo = Number(inpHeatNo.value || 1);
 
   const chunk2 = (arr)=>{
@@ -486,10 +484,25 @@ function renderAll(){
   renderHeats();
 }
 
-renderAll();
-
-// === Remote cross-device sync (optional) ===
+// === init ===
 (async ()=>{
+  // 若未載入任何名單，預設自動載入既定名單（data/participants.sample.csv）
+  if(!state.participants?.length){
+    try{
+      const res = await fetch('./data/participants.sample.csv', {cache:'no-store'});
+      if(res.ok){
+        const csvText = await res.text();
+        importCsvText(csvText);
+        setMsg(importMsg, '已自動載入既定名單（範例名單）。');
+      }
+    }catch(e){
+      // ignore: 仍可手動匯入
+    }
+  }
+
+  renderAll();
+
+  // === Remote cross-device sync (optional) ===
   await RemoteSync.init();
   onSave((st)=>RemoteSync.push(st));
 })();
