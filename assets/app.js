@@ -228,7 +228,7 @@ function renderHeatsOverview(pMap){
         }).join('')}
       </tbody>
     </table>
-    <div class="muted">提示：此表為「全部分組一次顯示」。點第一欄可快速切換看板目前組次。</div>
+    <div class="muted">提示：此表為「全部分組一次顯示」。看板目前組次只在此處切換：點第一欄「設為/✅」。</div>
   `;
   heatsOverview.innerHTML = head;
   heatsOverview.querySelectorAll('button[data-act="setCurrent"]').forEach(btn=>{
@@ -275,10 +275,9 @@ function renderHeats(){
               <span class="badge">${escapeHtml(h.round)}</span>
               <span class="badge">第 ${h.heatNo} 組</span>
               ${h.locked ? '<span class="badge">已鎖定</span>' : ''}
-              ${isCurrent ? '<span class="badge">看板顯示中</span>' : ''}
+              ${isCurrent ? '<span class="badge">看板顯示中</span>' : '<span class="muted">（切換看板請用上方總覽第一欄）</span>'}
             </div>
             <div class="row">
-              <button data-act="setCurrent" data-id="${h.id}">設為目前組次</button>
               <button data-act="export" data-id="${h.id}">匯出計分表</button>
               <button data-act="toggleLock" data-id="${h.id}">${h.locked?'解鎖':'鎖定'}</button>
               <button data-act="reseed" data-id="${h.id}" ${h.locked?'disabled':''}>重排</button>
