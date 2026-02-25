@@ -4,6 +4,14 @@ import { computeLeaderboard, normalizeTimeInput, parseCsv } from './logic.js';
 
 let state = loadState();
 
+// === URL 模式參數 ===
+const qs = new URLSearchParams(location.search);
+const laneParam = Number(qs.get('lane') || '0');
+const laneMode = Number.isFinite(laneParam) && laneParam>=1 && laneParam<=4;
+// admin=1 或 admin.html 皆視為後台模式（顯示「下一場」控制）
+const adminMode = (qs.get('admin') === '1') || /admin\.html$/i.test(location.pathname);
+
+
 // === diagnostics ===
 const diagEl = document.getElementById('diag');
 function diag(t){ if(diagEl) diagEl.textContent = t || ''; }
@@ -40,10 +48,6 @@ onSave((st)=>RemoteSync.push(st));
 
 // === helpers ===
 const el = (id)=>document.getElementById(id);
-const qs = new URLSearchParams(location.search);
-const laneParam = Number(qs.get('lane') || 0);
-const adminMode = qs.get('admin') === '1' || location.pathname.endsWith('admin.html');
-const laneMode = laneParam >= 1 && laneParam <= 4;
 
 
 // === navigation: next heat ===
@@ -59,10 +63,11 @@ function getHeatOrder(){
 function gotoNextHeat(){
   const order = getHeatOrder();
   if(!order.length) return;
-  const curId = state.currentHeatId || order[0].id;
+  state.ui = state.ui || {};
+  const curId = state.ui.currentHeatId || order[0].id;
   const idx = Math.max(0, order.findIndex(h=>h.id===curId));
   const next = order[Math.min(order.length-1, idx+1)];
-  state.currentHeatId = next.id;
+  state.ui.currentHeatId = next.id;
   saveState(state);
 }
 
@@ -76,8 +81,20 @@ function pMap(){
 }
 
 function currentHeat(){
-  const id = state.ui?.currentHeatId;
-  return (state.heats||[]).find(h=>h.id===id) || null;
+  state.ui = state.ui || {};
+  const id = state.ui.currentHeatId;
+  const heats = state.heats || [];
+  if(id){
+    return heats.find(h=>h.id===id) || null;
+  }
+  // UX：若尚未指定目前組次，預設選第一組，讓 iPad / 看板可立即使用
+  const order = getHeatOrder();
+  if(order.length){
+    state.ui.currentHeatId = order[0].id;
+    saveState(state);
+    return heats.find(h=>h.id===order[0].id) || null;
+  }
+  return null;
 }
 
 function ensureResultObj(heatId){
