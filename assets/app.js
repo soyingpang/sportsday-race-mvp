@@ -1,7 +1,6 @@
 import { loadState, saveState, resetState, subscribeStateUpdates, onSave } from './store.js';
-import { RemoteSync } from './remoteSync.js';
 import { parseCsv, gradeOfClass, laneAssign, makeHeatId } from './logic.js';
-import { exportTotalScoreSheet, exportBackupJSON, exportHandScoreSheet } from './export.js';
+import { exportBackupJSON, exportLaneSheetCSV, exportResultsCSV } from './export.js';
 let state = loadState();
 
 // === diagnostics ===
@@ -28,50 +27,25 @@ const chkRebuild = el('chkRebuild');
 const btnBuildAll = el('btnBuildAll');
 const createMsg = el('createMsg');
 const heatsList = el('heatsList');
-const cat1 = el('cat1');
-const cat2 = el('cat2');
-const cat3 = el('cat3');
 const heatsOverview = el('heatsOverview');
 const btnExportBackup = el('btnExportBackup');
-const btnExportTotal = el('btnExportTotal');
-const btnExportHand = el('btnExportHand');
+const btnExportLane = el('btnExportLane');
+const btnExportResults = el('btnExportResults');
 
 function setMsg(node, text){ node.textContent = text || ''; }
 
-function syncCategoriesToUI(){
-  const cats = state.categories || {c1:'類別1',c2:'類別2',c3:'類別3'};
-  if(cat1) cat1.value = cats.c1 || '類別1';
-  if(cat2) cat2.value = cats.c2 || '類別2';
-  if(cat3) cat3.value = cats.c3 || '類別3';
-}
-
-function saveCategoriesFromUI(){
-  if(!cat1 || !cat2 || !cat3) return;
-  state.categories = { c1: (cat1.value||'類別1').trim(), c2: (cat2.value||'類別2').trim(), c3: (cat3.value||'類別3').trim() };
-  saveState(state);
-}
-
-cat1?.addEventListener('change', saveCategoriesFromUI);
-cat2?.addEventListener('change', saveCategoriesFromUI);
-cat3?.addEventListener('change', saveCategoriesFromUI);
 
 
 btnExportBackup?.addEventListener('click', ()=>{
   exportBackupJSON(state);
 });
 
-btnExportTotal?.addEventListener('click', ()=>{
-  if(!state.participants?.length) return;
-  saveCategoriesFromUI();
-  exportTotalScoreSheet(state);
+btnExportLane?.addEventListener('click', ()=>{
+  exportLaneSheetCSV(state);
 });
-
-btnExportHand?.addEventListener('click', ()=>{
-  if(!state.heats?.length) return;
-  exportHandScoreSheet(state);
-});
-
-function byId(arr){ return Object.fromEntries(arr.map(x=>[x.id,x])); }
+btnExportResults?.addEventListener('click', ()=>{
+  exportResultsCSV(state);
+});function byId(arr){ return Object.fromEntries(arr.map(x=>[x.id,x])); }
 
 function renderParticipantsSummary(){
   if(!state.participants.length){
@@ -303,7 +277,5 @@ function renderAll(){
 
   renderAll();
 
-  // === Remote cross-device sync (optional) ===
-  await RemoteSync.init();
-  onSave((st)=>RemoteSync.push(st));
+  // === Remote cross-device sync (optional) ===  onSave((st)=>RemoteSync.push(st));
 })();
