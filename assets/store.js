@@ -1,18 +1,21 @@
-const KEY = 'sportsday_race_v2';
+const KEY = 'sportsday_race_v1';
 export const STORAGE_KEY = KEY;
-const CH = 'sportsday_race_bc_v2';
+const CH = 'sportsday_race_bc';
 
-// Optional hooks (e.g., analytics) that should run after each save.
 const saveHooks = [];
 export function onSave(cb){ if(typeof cb==='function') saveHooks.push(cb); }
 
+
 export function defaultState(){
   return {
-    version: 2,
+    version: 1,
     participants: [],
     heats: [],
     // results[heatId][lane] = { pid, timeSec, status, note, updatedAt }
     results: {},
+    // For non-track 3-category score sheet (manual handwriting / optional later input)
+    categories: { c1: '類別1', c2: '類別2', c3: '類別3' },
+    categoryScores: {},
     ui: { currentHeatId: null },
     updatedAt: Date.now()
   };
@@ -21,27 +24,13 @@ export function defaultState(){
 export function loadState(){
   try{
     const raw = localStorage.getItem(KEY);
-    if(!raw){
-      // Try migrate from v1 if exists
-      const v1 = localStorage.getItem('sportsday_race_v1');
-      if(v1){
-        const st1 = JSON.parse(v1);
-        const st2 = defaultState();
-        st2.participants = st1.participants || [];
-        st2.heats = st1.heats || [];
-        st2.results = st1.results || {};
-        st2.ui = st1.ui || { currentHeatId: null };
-        st2.updatedAt = Date.now();
-        localStorage.setItem(KEY, JSON.stringify(st2));
-        return st2;
-      }
-      return defaultState();
-    }
+    if(!raw) return defaultState();
     const st = JSON.parse(raw);
-    if(!st || st.version !== 2) return defaultState();
-    st.participants = st.participants || [];
-    st.heats = st.heats || [];
+    if(!st || st.version !== 1) return defaultState();
+    // backfill new fields for older data
     st.results = st.results || {};
+    st.categories = st.categories || { c1:'類別1', c2:'類別2', c3:'類別3' };
+    st.categoryScores = st.categoryScores || {};
     st.ui = st.ui || { currentHeatId: null };
     return st;
   }catch(e){
@@ -67,6 +56,7 @@ export function resetState(){
 }
 
 export const bc = (typeof BroadcastChannel !== 'undefined') ? new BroadcastChannel(CH) : null;
+
 
 export function subscribeStateUpdates(onUpdate){
   // BroadcastChannel for same-origin tabs; storage event as fallback.

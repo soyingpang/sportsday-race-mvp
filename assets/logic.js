@@ -78,10 +78,7 @@ export function laneAssign({classA, classB, pickedA, pickedB, fillStrategy}){
 }
 
 export function makeHeatId({grade, event, round, heatNo, classA, classB}){
-  // Deterministic id (stable across devices / export).
-  // Example: 1-60m-預賽-H01-1A_vs_1B
-  const h = String(heatNo).padStart(2,'0');
-  return `${grade}-${event}-${round}-H${h}-${classA}_vs_${classB}`;
+  return `${grade}-${event}-${round}-H${String(heatNo)}-${classA}_vs_${classB}-${Date.now()}`;
 }
 
 

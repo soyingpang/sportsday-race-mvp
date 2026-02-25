@@ -1,6 +1,7 @@
 import { loadState, saveState, resetState, subscribeStateUpdates, onSave } from './store.js';
+import { RemoteSync } from './remoteSync.js';
 import { parseCsv, gradeOfClass, laneAssign, makeHeatId } from './logic.js';
-import { exportBackupJSON, exportLaneSheetCSV, exportResultsCSV } from './export.js';
+import { exportTotalScoreSheet, exportBackupJSON, exportHandScoreSheet } from './export.js';
 let state = loadState();
 
 // === diagnostics ===
@@ -21,157 +22,139 @@ const el = (id)=>document.getElementById(id);
 const fileCsv = el('fileCsv');
 const importMsg = el('importMsg');
 const participantsSummary = el('participantsSummary');
+const selGrade = el('selGrade');
+const selClassA = el('selClassA');
+const selClassB = el('selClassB');
 const inpEvent = el('inpEvent');
+const inpHeatNo = el('inpHeatNo');
+const pickA = el('pickA');
+const pickB = el('pickB');
 const selFill = el('selFill');
-const chkRebuild = el('chkRebuild');
-const btnBuildAll = el('btnBuildAll');
+const btnBuildHeats = el('btnBuildHeats');
+const buildMode = ()=> (document.querySelector('input[name="buildMode"]:checked')?.value || 'single');
 const createMsg = el('createMsg');
 const heatsList = el('heatsList');
+const cat1 = el('cat1');
+const cat2 = el('cat2');
+const cat3 = el('cat3');
 const heatsOverview = el('heatsOverview');
 const btnExportBackup = el('btnExportBackup');
-const btnExportLane = el('btnExportLane');
-const btnExportResults = el('btnExportResults');
+const btnExportTotal = el('btnExportTotal');
+const btnExportHand = el('btnExportHand');
 
 function setMsg(node, text){ node.textContent = text || ''; }
 
+function syncCategoriesToUI(){
+  const cats = state.categories || {c1:'類別1',c2:'類別2',c3:'類別3'};
+  if(cat1) cat1.value = cats.c1 || '類別1';
+  if(cat2) cat2.value = cats.c2 || '類別2';
+  if(cat3) cat3.value = cats.c3 || '類別3';
+}
+
+function saveCategoriesFromUI(){
+  if(!cat1 || !cat2 || !cat3) return;
+  state.categories = { c1: (cat1.value||'類別1').trim(), c2: (cat2.value||'類別2').trim(), c3: (cat3.value||'類別3').trim() };
+  saveState(state);
+}
+
+cat1?.addEventListener('change', saveCategoriesFromUI);
+cat2?.addEventListener('change', saveCategoriesFromUI);
+cat3?.addEventListener('change', saveCategoriesFromUI);
 
 
 btnExportBackup?.addEventListener('click', ()=>{
   exportBackupJSON(state);
 });
 
-btnExportLane?.addEventListener('click', ()=>{
-  exportLaneSheetCSV(state);
-});
-btnExportResults?.addEventListener('click', ()=>{
-  exportResultsCSV(state);
-});
-
-// === Create schedule (one-click) ===
-btnBuildAll?.addEventListener('click', ()=>{
-  try{
-    const event = inpEvent?.value || '徑賽';
-    const fillStrategy = selFill?.value || 'keep'; // keep | other
-    const round = '預賽';
-    const rebuild = chkRebuild ? !!chkRebuild.checked : true;
-
-    const {heats, msg} = buildHeatsFromRoster({ event, round, fillStrategy });
-
-    if(!heats.length){
-      setMsg(createMsg, '⚠️ 無法建立：名單不足或未匯入。');
-      return;
-    }
-
-    if(rebuild){
-      // Clear all heats/results for selected event (simple & safe for one-off day)
-      const keepHeats = state.heats.filter(h=>h.event !== event);
-      state.heats = keepHeats.concat(heats);
-      // Remove results for removed heats
-      const keepIds = new Set(state.heats.map(h=>h.id));
-      const nextResults = {};
-      for(const [hid, r] of Object.entries(state.results||{})){
-        if(keepIds.has(hid)) nextResults[hid] = r;
-      }
-      state.results = nextResults;
-    }else{
-      state.heats = state.heats.concat(heats);
-    }
-
-    // Set current heat if none
-    if(!state.ui.currentHeatId && state.heats.length){
-      state.ui.currentHeatId = state.heats[0].id;
-    }
-    state.updatedAt = Date.now();
-    saveState(state);
-
-    setMsg(createMsg, '✅ 已建立：' + msg);
-    renderAll();
-  }catch(err){
-    console.error(err);
-    setMsg(createMsg, '⚠️ 建立失敗：' + (err?.message || err));
-  }
+btnExportTotal?.addEventListener('click', ()=>{
+  if(!state.participants?.length) return;
+  saveCategoriesFromUI();
+  exportTotalScoreSheet(state);
 });
 
-function buildHeatsFromRoster({event, round, fillStrategy}){
-  const roster = (state.participants||[]).filter(p=>p.present);
-  if(!roster.length) return {heats:[], msg:'名單為空'};
-
-  // group by grade -> class
-  const gradeMap = new Map(); // grade -> Map(class -> participants[])
-  for(const p of roster){
-    const g = gradeOfClass(p.class);
-    if(!g) continue;
-    if(!gradeMap.has(g)) gradeMap.set(g, new Map());
-    const cm = gradeMap.get(g);
-    if(!cm.has(p.class)) cm.set(p.class, []);
-    cm.get(p.class).push(p);
-  }
-  // stable order in each class: by no then id
-  for(const cm of gradeMap.values()){
-    for(const [cls, arr] of cm.entries()){
-      arr.sort((a,b)=>(a.no-b.no) || String(a.id).localeCompare(String(b.id)));
-      cm.set(cls, arr);
-    }
-  }
-
-  const heats = [];
-  const now = Date.now();
-  let createdSeq = 0;
-  const grades = Array.from(gradeMap.keys()).sort((a,b)=>Number(a)-Number(b));
-
-  for(const grade of grades){
-    const cm = gradeMap.get(grade);
-    const classes = Array.from(cm.keys()).sort((a,b)=>a.localeCompare(b,'zh-Hant'));
-    // pair classes: (A,B), (C,D)... by suffix order; fallback to sequential if unknown
-    const parsed = classes.map(cls=>{
-      const m = String(cls).match(/^(\d+)(.*)$/);
-      return {cls, g:m?m[1]:'', suf:(m?m[2]:'')};
-    }).sort((a,b)=>{
-      if(a.g!==b.g) return Number(a.g)-Number(b.g);
-      return String(a.suf).localeCompare(String(b.suf),'zh-Hant');
-    });
-
-    const pairs = [];
-    for(let i=0;i<parsed.length;i+=2){
-      const A = parsed[i]?.cls || '';
-      const B = parsed[i+1]?.cls || '';
-      if(!A) continue;
-      pairs.push([A,B]);
-    }
-
-    let heatNo = 1;
-    for(const [classA, classB] of pairs){
-      const listA = cm.get(classA) || [];
-      const listB = classB ? (cm.get(classB) || []) : [];
-      const need = Math.max(Math.ceil(listA.length/2), Math.ceil(listB.length/2), 1);
-
-      for(let k=0;k<need;k++){
-        const pickedA = listA.slice(k*2, k*2+2).map(x=>x.id);
-        const pickedB = listB.slice(k*2, k*2+2).map(x=>x.id);
-        const lanes = laneAssign({ classA, classB: (classB||''), pickedA, pickedB, fillStrategy });
-        const h = {
-          grade,
-          event,
-          round,
-          heatNo,
-          classA,
-          classB: (classB||''),
-          lanes,
-          locked: false,
-          createdAt: now + (createdSeq++)
-        };
-        h.id = makeHeatId(h);
-        heats.push(h);
-        heatNo++;
-      }
-    }
-  }
-
-  const msg = `${heats.length} 組（${grades.length} 個年級）`;
-  return {heats, msg};
-}
+btnExportHand?.addEventListener('click', ()=>{
+  if(!state.heats?.length) return;
+  exportHandScoreSheet(state);
+});
 
 function byId(arr){ return Object.fromEntries(arr.map(x=>[x.id,x])); }
+
+function classesOfGrade(grade){
+  const set = new Set(state.participants
+    .filter(p=>gradeOfClass(p.class)===String(grade) && p.present)
+    .map(p=>p.class));
+  return Array.from(set).sort();
+}
+
+function renderClassOptions(){
+  const grade = selGrade.value;
+  const classes = classesOfGrade(grade);
+  selClassA.innerHTML = classes.map(c=>`<option value="${c}">${c}</option>`).join('');
+  selClassB.innerHTML = classes.map(c=>`<option value="${c}">${c}</option>`).join('');
+  if(selClassB.value === selClassA.value && classes.length>1){
+    selClassB.value = classes[1];
+  }
+  renderPickers();
+}
+
+function renderBulkControls(grp){
+  return `
+    <div class="row" style="margin:6px 0 8px 0">
+      <button type="button" data-bulk="${grp}" data-act="all">全選</button>
+      <button type="button" data-bulk="${grp}" data-act="none">全不選</button>
+      <button type="button" data-bulk="${grp}" data-act="top2">取前2位</button>
+      <span class="muted" data-count="${grp}"></span>
+    </div>`;
+}
+
+function renderPickers(){
+  const classA = selClassA.value;
+  const classB = selClassB.value;
+
+  const listA = state.participants.filter(p=>p.class===classA && p.present).sort((a,b)=>a.no-b.no);
+  const listB = state.participants.filter(p=>p.class===classB && p.present).sort((a,b)=>a.no-b.no);
+
+  const mk = (p, grp)=>`
+    <label>
+      <input type="checkbox" data-grp="${grp}" value="${p.id}" />
+      <span>${p.no}. ${p.name}</span>
+    </label>`;
+  pickA.innerHTML = (listA.length ? (renderBulkControls('A') + listA.map(p=>mk(p,'A')).join('')) : '<div class="muted">（無資料）</div>');
+  pickB.innerHTML = (listB.length ? (renderBulkControls('B') + listB.map(p=>mk(p,'B')).join('')) : '<div class="muted">（無資料）</div>');
+  // 批次選取 + 勾選數提示（允許超過 2；建立組次時只取前 2 位）
+  function updateCount(root, grp){
+    const checked = root.querySelectorAll('input[type=checkbox]:checked').length;
+    const node = root.querySelector(`[data-count="${grp}"]`);
+    if(node){
+      node.textContent = `已選 ${checked} 位（建立組次只取前2位）`;
+    }
+  }
+
+  [pickA, pickB].forEach(root=>{
+    // bulk buttons
+    root.addEventListener('click', e=>{
+      const btn = e.target.closest('button[data-bulk]');
+      if(!btn) return;
+      const grp = btn.dataset.bulk;
+      const act = btn.dataset.act;
+      const boxes = root.querySelectorAll('input[type=checkbox]');
+      if(act === 'all') boxes.forEach(b=>b.checked = true);
+      if(act === 'none') boxes.forEach(b=>b.checked = false);
+      if(act === 'top2') boxes.forEach((b,i)=>b.checked = i < 2);
+      updateCount(root, grp);
+    });
+
+    // checkbox count
+    root.addEventListener('change', e=>{
+      const grp = e.target?.dataset?.grp;
+      if(!grp) return;
+      updateCount(root, grp);
+    });
+  });
+
+  updateCount(pickA, 'A');
+  updateCount(pickB, 'B');
+}
 
 function renderParticipantsSummary(){
   if(!state.participants.length){
@@ -377,11 +360,111 @@ document.getElementById('btnReset')?.addEventListener('click', ()=>{
 });
 
 // === Create heat ===
+btnBuildHeats?.addEventListener('click', ()=>{
+  const mode = buildMode();
+  createHeats({all: mode==='all'});
+});
+
+function createHeats({all}){
+  const grade = selGrade.value;
+  const classA = selClassA.value;
+  const classB = selClassB.value;
+
+  if(!state.participants.length){
+    setMsg(createMsg, '請先匯入名單。');
+    return;
+  }
+  if(!classA || !classB){
+    setMsg(createMsg, '請選擇兩個班級。');
+    return;
+  }
+  if(classA === classB){
+    setMsg(createMsg, 'A 班與 B 班不可相同。');
+    return;
+  }
+  // enforce grade separation
+  if(gradeOfClass(classA) !== String(grade) || gradeOfClass(classB) !== String(grade)){
+    setMsg(createMsg, '年級不符合：1年級與2年級不可混賽。');
+    return;
+  }
+
+  const pickedAAllRaw = Array.from(pickA.querySelectorAll('input[type=checkbox]:checked')).map(x=>x.value);
+  const pickedBAllRaw = Array.from(pickB.querySelectorAll('input[type=checkbox]:checked')).map(x=>x.value);
+
+  if(pickedAAllRaw.length + pickedBAllRaw.length === 0){
+    setMsg(createMsg, '請先用「全選 / 取前2位」或自行勾選名單。');
+    return;
+  }
+
+  // 依座號排序（確保「全選」後分組穩定）
+  const pMap = byId(state.participants);
+  const sortByNo = (ids)=> ids
+    .filter(id=>pMap[id])
+    .slice()
+    .sort((a,b)=>{
+      const pa=pMap[a], pb=pMap[b];
+      return (pa.no - pb.no) || String(pa.name).localeCompare(String(pb.name), 'zh-Hant');
+    });
+
+  const pickedAAll = sortByNo(pickedAAllRaw);
+  const pickedBAll = sortByNo(pickedBAllRaw);
+
+  const event = (inpEvent.value || '60m').trim();
+  const round = "";
+  const startHeatNo = Number(inpHeatNo.value || 1);
+
+  const chunk2 = (arr)=>{
+    const out=[];
+    for(let i=0;i<arr.length;i+=2) out.push(arr.slice(i,i+2));
+    return out.length ? out : [[]];
+  };
+
+  const chunksA = chunk2(pickedAAll);
+  const chunksB = chunk2(pickedBAll);
+
+  const total = all ? Math.max(chunksA.length, chunksB.length) : 1;
+
+  for(let i=0;i<total;i++){
+    const pickedA = (chunksA[i] || []).slice(0,2);
+    const pickedB = (chunksB[i] || []).slice(0,2);
+    const heatNo = startHeatNo + i;
+
+    const id = makeHeatId({grade, event, round, heatNo, classA, classB});
+    const lanes = laneAssign({classA, classB, pickedA, pickedB, fillStrategy: selFill.value});
+
+    state.heats.push({
+      id, grade: String(grade), event, round, heatNo,
+      classA, classB,
+      pickedA, pickedB,
+      fillStrategy: selFill.value,
+      lanes,
+      locked: false,
+      createdAt: Date.now()
+    });
+
+    if(!state.ui.currentHeatId) state.ui.currentHeatId = id;
+  }
+
+  saveState(state);
+
+  if(all){
+    setMsg(createMsg, `已自動建立 ${total} 組：${grade}年級 ${event} ${round}（由已勾選名單分批每組每班 2 位）`);
+  }else{
+    setMsg(createMsg, `已建立：${grade}年級 ${event} ${round} 第${startHeatNo}組`);
+  }
+  renderHeats();
+}
 
 
+// === Sync ===
+
+selGrade?.addEventListener('change', renderClassOptions);
+selClassA?.addEventListener('change', renderPickers);
+selClassB?.addEventListener('change', renderPickers);
 
 function renderAll(){
   renderParticipantsSummary();
+  renderClassOptions();
   renderHeats();
 }
 
@@ -403,5 +486,7 @@ function renderAll(){
 
   renderAll();
 
-  // === Remote cross-device sync (optional) ===  onSave((st)=>RemoteSync.push(st));
+  // === Remote cross-device sync (optional) ===
+  await RemoteSync.init();
+  onSave((st)=>RemoteSync.push(st));
 })();
