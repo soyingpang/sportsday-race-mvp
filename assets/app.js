@@ -22,16 +22,10 @@ const el = (id)=>document.getElementById(id);
 const fileCsv = el('fileCsv');
 const importMsg = el('importMsg');
 const participantsSummary = el('participantsSummary');
-const selGrade = el('selGrade');
-const selClassA = el('selClassA');
-const selClassB = el('selClassB');
 const inpEvent = el('inpEvent');
-const inpHeatNo = el('inpHeatNo');
-const pickA = el('pickA');
-const pickB = el('pickB');
 const selFill = el('selFill');
-const btnBuildHeats = el('btnBuildHeats');
-const buildMode = ()=> (document.querySelector('input[name="buildMode"]:checked')?.value || 'single');
+const chkRebuild = el('chkRebuild');
+const btnBuildAll = el('btnBuildAll');
 const createMsg = el('createMsg');
 const heatsList = el('heatsList');
 const cat1 = el('cat1');
@@ -78,83 +72,6 @@ btnExportHand?.addEventListener('click', ()=>{
 });
 
 function byId(arr){ return Object.fromEntries(arr.map(x=>[x.id,x])); }
-
-function classesOfGrade(grade){
-  const set = new Set(state.participants
-    .filter(p=>gradeOfClass(p.class)===String(grade) && p.present)
-    .map(p=>p.class));
-  return Array.from(set).sort();
-}
-
-function renderClassOptions(){
-  const grade = selGrade.value;
-  const classes = classesOfGrade(grade);
-  selClassA.innerHTML = classes.map(c=>`<option value="${c}">${c}</option>`).join('');
-  selClassB.innerHTML = classes.map(c=>`<option value="${c}">${c}</option>`).join('');
-  if(selClassB.value === selClassA.value && classes.length>1){
-    selClassB.value = classes[1];
-  }
-  renderPickers();
-}
-
-function renderBulkControls(grp){
-  return `
-    <div class="row" style="margin:6px 0 8px 0">
-      <button type="button" data-bulk="${grp}" data-act="all">全選</button>
-      <button type="button" data-bulk="${grp}" data-act="none">全不選</button>
-      <button type="button" data-bulk="${grp}" data-act="top2">取前2位</button>
-      <span class="muted" data-count="${grp}"></span>
-    </div>`;
-}
-
-function renderPickers(){
-  const classA = selClassA.value;
-  const classB = selClassB.value;
-
-  const listA = state.participants.filter(p=>p.class===classA && p.present).sort((a,b)=>a.no-b.no);
-  const listB = state.participants.filter(p=>p.class===classB && p.present).sort((a,b)=>a.no-b.no);
-
-  const mk = (p, grp)=>`
-    <label>
-      <input type="checkbox" data-grp="${grp}" value="${p.id}" />
-      <span>${p.no}. ${p.name}</span>
-    </label>`;
-  pickA.innerHTML = (listA.length ? (renderBulkControls('A') + listA.map(p=>mk(p,'A')).join('')) : '<div class="muted">（無資料）</div>');
-  pickB.innerHTML = (listB.length ? (renderBulkControls('B') + listB.map(p=>mk(p,'B')).join('')) : '<div class="muted">（無資料）</div>');
-  // 批次選取 + 勾選數提示（允許超過 2；建立組次時只取前 2 位）
-  function updateCount(root, grp){
-    const checked = root.querySelectorAll('input[type=checkbox]:checked').length;
-    const node = root.querySelector(`[data-count="${grp}"]`);
-    if(node){
-      node.textContent = `已選 ${checked} 位（建立組次只取前2位）`;
-    }
-  }
-
-  [pickA, pickB].forEach(root=>{
-    // bulk buttons
-    root.addEventListener('click', e=>{
-      const btn = e.target.closest('button[data-bulk]');
-      if(!btn) return;
-      const grp = btn.dataset.bulk;
-      const act = btn.dataset.act;
-      const boxes = root.querySelectorAll('input[type=checkbox]');
-      if(act === 'all') boxes.forEach(b=>b.checked = true);
-      if(act === 'none') boxes.forEach(b=>b.checked = false);
-      if(act === 'top2') boxes.forEach((b,i)=>b.checked = i < 2);
-      updateCount(root, grp);
-    });
-
-    // checkbox count
-    root.addEventListener('change', e=>{
-      const grp = e.target?.dataset?.grp;
-      if(!grp) return;
-      updateCount(root, grp);
-    });
-  });
-
-  updateCount(pickA, 'A');
-  updateCount(pickB, 'B');
-}
 
 function renderParticipantsSummary(){
   if(!state.participants.length){
@@ -360,111 +277,11 @@ document.getElementById('btnReset')?.addEventListener('click', ()=>{
 });
 
 // === Create heat ===
-btnBuildHeats?.addEventListener('click', ()=>{
-  const mode = buildMode();
-  createHeats({all: mode==='all'});
-});
-
-function createHeats({all}){
-  const grade = selGrade.value;
-  const classA = selClassA.value;
-  const classB = selClassB.value;
-
-  if(!state.participants.length){
-    setMsg(createMsg, '請先匯入名單。');
-    return;
-  }
-  if(!classA || !classB){
-    setMsg(createMsg, '請選擇兩個班級。');
-    return;
-  }
-  if(classA === classB){
-    setMsg(createMsg, 'A 班與 B 班不可相同。');
-    return;
-  }
-  // enforce grade separation
-  if(gradeOfClass(classA) !== String(grade) || gradeOfClass(classB) !== String(grade)){
-    setMsg(createMsg, '年級不符合：1年級與2年級不可混賽。');
-    return;
-  }
-
-  const pickedAAllRaw = Array.from(pickA.querySelectorAll('input[type=checkbox]:checked')).map(x=>x.value);
-  const pickedBAllRaw = Array.from(pickB.querySelectorAll('input[type=checkbox]:checked')).map(x=>x.value);
-
-  if(pickedAAllRaw.length + pickedBAllRaw.length === 0){
-    setMsg(createMsg, '請先用「全選 / 取前2位」或自行勾選名單。');
-    return;
-  }
-
-  // 依座號排序（確保「全選」後分組穩定）
-  const pMap = byId(state.participants);
-  const sortByNo = (ids)=> ids
-    .filter(id=>pMap[id])
-    .slice()
-    .sort((a,b)=>{
-      const pa=pMap[a], pb=pMap[b];
-      return (pa.no - pb.no) || String(pa.name).localeCompare(String(pb.name), 'zh-Hant');
-    });
-
-  const pickedAAll = sortByNo(pickedAAllRaw);
-  const pickedBAll = sortByNo(pickedBAllRaw);
-
-  const event = (inpEvent.value || '60m').trim();
-  const round = "";
-  const startHeatNo = Number(inpHeatNo.value || 1);
-
-  const chunk2 = (arr)=>{
-    const out=[];
-    for(let i=0;i<arr.length;i+=2) out.push(arr.slice(i,i+2));
-    return out.length ? out : [[]];
-  };
-
-  const chunksA = chunk2(pickedAAll);
-  const chunksB = chunk2(pickedBAll);
-
-  const total = all ? Math.max(chunksA.length, chunksB.length) : 1;
-
-  for(let i=0;i<total;i++){
-    const pickedA = (chunksA[i] || []).slice(0,2);
-    const pickedB = (chunksB[i] || []).slice(0,2);
-    const heatNo = startHeatNo + i;
-
-    const id = makeHeatId({grade, event, round, heatNo, classA, classB});
-    const lanes = laneAssign({classA, classB, pickedA, pickedB, fillStrategy: selFill.value});
-
-    state.heats.push({
-      id, grade: String(grade), event, round, heatNo,
-      classA, classB,
-      pickedA, pickedB,
-      fillStrategy: selFill.value,
-      lanes,
-      locked: false,
-      createdAt: Date.now()
-    });
-
-    if(!state.ui.currentHeatId) state.ui.currentHeatId = id;
-  }
-
-  saveState(state);
-
-  if(all){
-    setMsg(createMsg, `已自動建立 ${total} 組：${grade}年級 ${event} ${round}（由已勾選名單分批每組每班 2 位）`);
-  }else{
-    setMsg(createMsg, `已建立：${grade}年級 ${event} ${round} 第${startHeatNo}組`);
-  }
-  renderHeats();
-}
 
 
-// === Sync ===
-
-selGrade?.addEventListener('change', renderClassOptions);
-selClassA?.addEventListener('change', renderPickers);
-selClassB?.addEventListener('change', renderPickers);
 
 function renderAll(){
   renderParticipantsSummary();
-  renderClassOptions();
   renderHeats();
 }
 
