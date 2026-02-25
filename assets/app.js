@@ -31,8 +31,8 @@ const inpHeatNo = el('inpHeatNo');
 const pickA = el('pickA');
 const pickB = el('pickB');
 const selFill = el('selFill');
-const chkAutoHeats = el('chkAutoHeats');
-const btnAutoHeats = el('btnAutoHeats');
+const btnBuildHeats = el('btnBuildHeats');
+const buildMode = ()=> (document.querySelector('input[name="buildMode"]:checked')?.value || 'single');
 const createMsg = el('createMsg');
 const heatsList = el('heatsList');
 const cat1 = el('cat1');
@@ -379,13 +379,9 @@ document.getElementById('btnReset')?.addEventListener('click', ()=>{
 });
 
 // === Create heat ===
-document.getElementById('btnCreateHeat')?.addEventListener('click', ()=>{
-  const autoAll = !!chkAutoHeats?.checked;
-  createHeats({all: autoAll});
-});
-
-btnAutoHeats?.addEventListener('click', ()=>{
-  createHeats({all: true});
+btnBuildHeats?.addEventListener('click', ()=>{
+  const mode = buildMode();
+  createHeats({all: mode==='all'});
 });
 
 function createHeats({all}){
@@ -473,7 +469,7 @@ function createHeats({all}){
   if(all){
     setMsg(createMsg, `已自動建立 ${total} 組：${grade}年級 ${event} ${round}（由已勾選名單分批每組每班 2 位）`);
   }else{
-    setMsg(createMsg, `已建立：${grade}年級 ${event} ${round} 第${startHeatNo}組（取各班前 2 位）`);
+    setMsg(createMsg, `已建立：${grade}年級 ${event} ${round} 第${startHeatNo}組`);
   }
   renderHeats();
 }
