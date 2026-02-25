@@ -1,7 +1,7 @@
 import { loadState, saveState, resetState, subscribeStateUpdates, onSave } from './store.js';
-import { exportTotalScoreSheet, exportHeatScoreSheet, exportAllHeatsHandwriteOneSheet } from './export.js';
 import { RemoteSync } from './remoteSync.js';
 import { parseCsv, gradeOfClass, laneAssign, makeHeatId } from './logic.js';
+import { exportTotalScoreSheet, exportBackupJSON, exportHandScoreSheet } from './export.js';
 let state = loadState();
 
 // === diagnostics ===
@@ -37,10 +37,10 @@ const heatsList = el('heatsList');
 const cat1 = el('cat1');
 const cat2 = el('cat2');
 const cat3 = el('cat3');
-const btnExportTotal = el('btnExportTotal');
-const exportMsg = el('exportMsg');
-const btnExportHeatsOneSheet = el('btnExportHeatsOneSheet');
 const heatsOverview = el('heatsOverview');
+const btnExportBackup = el('btnExportBackup');
+const btnExportTotal = el('btnExportTotal');
+const btnExportHand = el('btnExportHand');
 
 function setMsg(node, text){ node.textContent = text || ''; }
 
@@ -61,34 +61,22 @@ cat1?.addEventListener('change', saveCategoriesFromUI);
 cat2?.addEventListener('change', saveCategoriesFromUI);
 cat3?.addEventListener('change', saveCategoriesFromUI);
 
-btnExportTotal?.addEventListener('click', ()=>{
-  if(!state.participants?.length){
-    exportMsg.textContent = '請先匯入名單。';
-    return;
-  }
-  saveCategoriesFromUI();
-  try{
-    exportTotalScoreSheet(state);
-    exportMsg.textContent = '已匯出：總分表（單一工作表）';
-  }catch(e){
-    exportMsg.textContent = '匯出失敗：' + (e?.message || e);
-    throw e;
-  }
+
+btnExportBackup?.addEventListener('click', ()=>{
+  exportBackupJSON(state);
 });
 
-btnExportHeatsOneSheet?.addEventListener('click', ()=>{
-  if(!state.heats?.length){
-    exportMsg.textContent = '尚未建立任何場次。';
-    return;
-  }
-  try{
-    exportAllHeatsHandwriteOneSheet(state, {sheetName:'場次手寫計分表'});
-    exportMsg.textContent = '已匯出：場次手寫計分表（單一工作表）';
-  }catch(e){
-    exportMsg.textContent = '匯出失敗：' + (e?.message || e);
-    throw e;
-  }
+btnExportTotal?.addEventListener('click', ()=>{
+  if(!state.participants?.length) return;
+  saveCategoriesFromUI();
+  exportTotalScoreSheet(state);
 });
+
+btnExportHand?.addEventListener('click', ()=>{
+  if(!state.heats?.length) return;
+  exportHandScoreSheet(state);
+});
+
 function byId(arr){ return Object.fromEntries(arr.map(x=>[x.id,x])); }
 
 function classesOfGrade(grade){
@@ -276,7 +264,7 @@ function renderHeats(){
               ${isCurrent ? '<span class="badge">看板顯示中</span>' : '<span class="muted">（切換看板請用上方總覽第一欄）</span>'}
             </div>
             <div class="row">
-              <button data-act="export" data-id="${h.id}">匯出計分表</button>
+              
               <button data-act="toggleLock" data-id="${h.id}">${h.locked?'解鎖':'鎖定'}</button>
               <button data-act="reseed" data-id="${h.id}" ${h.locked?'disabled':''}>重排</button>
               <button data-act="del" data-id="${h.id}" class="danger">刪除</button>
@@ -299,10 +287,6 @@ function renderHeats(){
         state.ui.currentHeatId = id;
         saveState(state);
         renderHeats();
-        return;
-      }
-      if(act === 'export'){
-        exportHeatScoreSheet(state.heats[idx], state.participants);
         return;
       }
       if(act === 'toggleLock'){

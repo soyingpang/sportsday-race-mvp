@@ -3,131 +3,113 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>徑賽系統（MVP）</title>
+  <title>親子遊戲日 計分系統</title>
   <link rel="stylesheet" href="./assets/app.css" />
 </head>
 <body>
   <header class="bar">
-    <div class="title">徑賽系統（MVP / 4 道）</div>
+    <div class="title">親子遊戲日 計分系統（4 道）</div>
     <nav class="nav">
       <a href="./board.html" target="_blank" rel="noopener">大螢幕看板</a>
-      <a href="./score.html" target="_blank" rel="noopener">計分員輸入</a>
+      <a href="./score.html" target="_blank" rel="noopener">iPad 計分</a>
+      <a href="./admin.html" target="_blank" rel="noopener">後台總控入分</a>
       <button id="btnReset" class="danger">重置本機資料</button>
     </nav>
   </header>
   <div id="diag" class="msg" style="padding:0 16px"></div>
 
+  
   <main class="grid">
+
     <section class="card">
-      <h2>1) 參賽名單（已鎖定：範例名單）</h2>
-      <p class="muted">本次活動使用既定名單，第一次開啟會自動載入並永久保存在此裝置。</p>
-
+      <h2>參賽名單（已鎖定）</h2>
+      <p class="muted">本次活動使用既定範例名單（data/participants.sample.csv）。如需更換，請展開「進階」。</p>
       <details>
-        <summary>（可選）更換名單 / 重新匯入</summary>
-        <p class="muted">欄位：id,class,no,name,present（present 允許 true/false 或 1/0）</p>
+        <summary>進階：重新匯入名單 CSV</summary>
         <div class="row">
-          <input type="file" id="fileCsv" accept=".csv,text/csv" />
-          <button id="btnLoadSample">載入範例名單</button>
+          <input id="fileCsv" type="file" accept=".csv,text/csv" />
+          <button id="btnLoadSample">載入既定名單</button>
         </div>
-        <div id="importMsg" class="msg"></div>
-
-        <details>
-          <summary>名單概覽</summary>
-          <div id="participantsSummary" class="mono"></div>
-        </details>
+        <div id="importMsg" class="muted"></div>
       </details>
+      <div id="participantsSummary" class="muted"></div>
     </section>
 
     <section class="card">
-      <h2>2) 建立賽程（同年級、兩班對賽）</h2>
-      <p class="muted">規則：每組 A 班 2 人 + B 班 2 人，Lane1→4 順序分線（A1,A2,B1,B2）。</p>
-
+      <h2>建立賽程（4 道）</h2>
       <div class="row">
-        <label>年級
-          <select id="selGrade">
-            <option value="1">一年級</option>
-            <option value="2">二年級</option>
-          </select>
-        </label>
-        <label>比賽名稱
-          <select id="inpEvent">
-            <option value="火炬接力跑">火炬接力跑</option>
-            <option value="豆袋運送">豆袋運送</option>
-            <option value="穿越時光隧道">穿越時光隧道</option>
-          </select>
-        </label>
-<label>起始組次 <input id="inpHeatNo" type="number" min="1" value="1" /></label>
+        <label>項目</label>
+        <select id="inpEvent">
+          <option value="火炬接力跑">火炬接力跑</option>
+          <option value="豆袋運送">豆袋運送</option>
+          <option value="穿越時光隧道">穿越時光隧道</option>
+        </select>
+        <label>組次</label>
+        <input id="inpHeatNo" type="number" min="1" step="1" value="1" style="width:90px" />
       </div>
 
+      <details>
+        <summary>進階：指定 A/B 班與選手（可略過）</summary>
+        <div class="row">
+          <label>年級</label>
+          <select id="selGrade"></select>
+          <label>A 班</label>
+          <select id="selClassA"></select>
+          <label>B 班</label>
+          <select id="selClassB"></select>
+          <label>補位</label>
+          <select id="selFill">
+            <option value="other">不足用另一班補足</option>
+            <option value="empty">不足留空</option>
+          </select>
+        </div>
+        <div class="row">
+          <div style="flex:1">
+            <div class="muted">A 班（取前 2 位）</div>
+            <div id="pickA" class="pick"></div>
+          </div>
+          <div style="flex:1">
+            <div class="muted">B 班（取前 2 位）</div>
+            <div id="pickB" class="pick"></div>
+          </div>
+        </div>
+      </details>
+
       <div class="row">
-        <label>A 班 <select id="selClassA"></select></label>
-        <label>B 班 <select id="selClassB"></select></label>
-
-        <label style="display:flex;gap:10px;align-items:center">
-          模式
-          <span class="muted">
-            <label style="margin-right:8px"><input type="radio" name="buildMode" value="single" checked> 建立 1 組</label>
-            <label><input type="radio" name="buildMode" value="all"> 自動排完</label>
-          </span>
-        </label>
-
+        <div class="muted">模式：</div>
+        <label><input type="radio" name="buildMode" value="single" checked> 建立 1 組</label>
+        <label><input type="radio" name="buildMode" value="all"> 自動排完（依名單）</label>
         <button id="btnBuildHeats" class="primary">建立/排程</button>
       </div>
-
-      <details>
-        <summary>進階（名單挑選 / 補位策略）</summary>
-
-        <div class="row" style="margin-top:10px">
-          <label>不足 2 人補位策略
-            <select id="selFill">
-              <option value="other">由另一班補足（先填滿 Lane）</option>
-              <option value="empty">保留空道</option>
-            </select>
-          </label>
-        </div>
-
-        <div class="row">
-          <div class="col">
-            <h3>A 班選手（最多 2/每組）</h3>
-            <div id="pickA" class="picker"></div>
-          </div>
-          <div class="col">
-            <h3>B 班選手（最多 2/每組）</h3>
-            <div id="pickB" class="picker"></div>
-          </div>
-        </div>
-
-        <p class="muted" style="margin-top:8px">
-          提示：按「取前2位」可快速勾選；選取超過 2 位時，「自動排完」會依座號順序每 2 位切一組。
-        </p>
-      </details>
-
-      <div id="createMsg" class="msg"></div>
+      <div id="createMsg" class="muted"></div>
     </section>
 
-    <section class="card span2">
-      <h2>3) 組次清單與匯出</h2>
-
+    <section class="card">
+      <h2>文件匯出（交件用）</h2>
       <div class="row">
-        <button id="btnExportHeatsOneSheet" class="primary">匯出：場次手寫計分表（Excel / 單一工作表）</button>
-        <span id="exportMsg" class="muted"></span>
+        <button id="btnExportBackup">匯出資料備份（JSON）</button>
+        <button id="btnExportTotal">匯出總分表（XLSX）</button>
+        <button id="btnExportHand">匯出手寫計分表（XLSX）</button>
       </div>
+      <details>
+        <summary>進階：總分表欄位名稱</summary>
+        <div class="row">
+          <label>類別1</label><input id="cat1" value="類別1" />
+          <label>類別2</label><input id="cat2" value="類別2" />
+          <label>類別3</label><input id="cat3" value="類別3" />
+        </div>
+      </details>
+      <div class="muted">提示：手寫計分表會依目前已建立的組次產生，每組 4 道一列。</div>
+    </section>
 
+    <section class="card">
+      <h2>組次列表</h2>
       <div id="heatsOverview"></div>
       <div id="heatsList"></div>
-
-      <details>
-        <summary>其他表單（非徑賽核心）</summary>
-        <p class="muted">用途：列印後手寫填入三個類別分數（不會拆成多個 Sheet）。</p>
-        <div class="row">
-          <label>類別1 <input id="cat1" value="類別1" /></label>
-          <label>類別2 <input id="cat2" value="類別2" /></label>
-          <label>類別3 <input id="cat3" value="類別3" /></label>
-          <button id="btnExportTotal">匯出：總分表（Excel）</button>
-        </div>
-      </details>
     </section>
+
   </main>
+
 
   <footer class="foot muted">
     <div>資料儲存在此瀏覽器 localStorage；多分頁以 BroadcastChannel 同步。</div>

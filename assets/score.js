@@ -11,6 +11,16 @@ window.addEventListener('error', (e)=>diag(`⚠️ 系統錯誤：${e.message}`)
 
 diag('✅ 系統已載入（JS OK）');
 
+// admin quick controls
+if(adminMode){
+  const bar = document.createElement('div');
+  bar.className='adminQuick';
+  bar.innerHTML = `<button id="btnNextHeat" class="primary">下一場 ▶</button> <span class="muted" id="nextHint"></span>`;
+  document.body.insertBefore(bar, document.body.firstChild.nextSibling);
+  bar.querySelector('#btnNextHeat').addEventListener('click', ()=>{ gotoNextHeat(); render(); });
+}
+
+
 // 若未載入任何名單，預設自動載入既定名單（data/participants.sample.csv）
 if(!state.participants?.length){
   try{
@@ -32,7 +42,30 @@ onSave((st)=>RemoteSync.push(st));
 const el = (id)=>document.getElementById(id);
 const qs = new URLSearchParams(location.search);
 const laneParam = Number(qs.get('lane') || 0);
+const adminMode = qs.get('admin') === '1' || location.pathname.endsWith('admin.html');
 const laneMode = laneParam >= 1 && laneParam <= 4;
+
+
+// === navigation: next heat ===
+function getHeatOrder(){
+  // order by event name then heatNo
+  const heats = (state.heats||[]).slice();
+  heats.sort((a,b)=>{
+    if(a.event!==b.event) return String(a.event).localeCompare(String(b.event),'zh-Hant');
+    return (a.heatNo||0)-(b.heatNo||0);
+  });
+  return heats;
+}
+function gotoNextHeat(){
+  const order = getHeatOrder();
+  if(!order.length) return;
+  const curId = state.currentHeatId || order[0].id;
+  const idx = Math.max(0, order.findIndex(h=>h.id===curId));
+  const next = order[Math.min(order.length-1, idx+1)];
+  state.currentHeatId = next.id;
+  saveState(state);
+}
+
 
 const laneModeRoot = el('laneMode');
 const fullModeRoot = el('fullMode');
