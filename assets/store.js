@@ -1,22 +1,20 @@
-const KEY = 'sportsday_race_v1';
+const KEY = 'sportsday_local_v1';
 export const STORAGE_KEY = KEY;
-const CH = 'sportsday_race_bc';
-
-const saveHooks = [];
-export function onSave(cb){ if(typeof cb==='function') saveHooks.push(cb); }
-
 
 export function defaultState(){
   return {
     version: 1,
-    participants: [],
-    heats: [],
-    // results[heatId][lane] = { pid, timeSec, status, note, updatedAt }
-    results: {},
-    // For non-track 3-category score sheet (manual handwriting / optional later input)
-    categories: { c1: '類別1', c2: '類別2', c3: '類別3' },
-    categoryScores: {},
+    participants: [],   // [{id,class,no,name,present}]
+    heats: [],          // schedule blocks (optional for calling next teams)
     ui: { currentHeatId: null },
+
+    // 3-game time input (backend enter later)
+    games: {
+      labels: ['遊戲1','遊戲2','遊戲3'],
+      // times[pid] = { t1:number|null, t2:number|null, t3:number|null, note:string }
+      times: {}
+    },
+
     updatedAt: Date.now()
   };
 }
@@ -27,11 +25,12 @@ export function loadState(){
     if(!raw) return defaultState();
     const st = JSON.parse(raw);
     if(!st || st.version !== 1) return defaultState();
-    // backfill new fields for older data
-    st.results = st.results || {};
-    st.categories = st.categories || { c1:'類別1', c2:'類別2', c3:'類別3' };
-    st.categoryScores = st.categoryScores || {};
+    st.participants = st.participants || [];
+    st.heats = st.heats || [];
     st.ui = st.ui || { currentHeatId: null };
+    st.games = st.games || { labels:['遊戲1','遊戲2','遊戲3'], times:{} };
+    st.games.labels = st.games.labels || ['遊戲1','遊戲2','遊戲3'];
+    st.games.times = st.games.times || {};
     return st;
   }catch(e){
     console.warn('loadState fail', e);
@@ -39,15 +38,10 @@ export function loadState(){
   }
 }
 
-export function saveState(state, {broadcast=true, runHooks=true} = {}){
+export function saveState(state){
   state.updatedAt = Date.now();
   localStorage.setItem(KEY, JSON.stringify(state));
-  if(broadcast && bc) bc.postMessage({type:'STATE_UPDATED', updatedAt: state.updatedAt});
-  if(runHooks){
-    for(const fn of saveHooks){
-      try{ fn(state); }catch(e){ console.warn('onSave hook fail', e); }
-    }
-  }
+  // let other tabs update via storage event (no BroadcastChannel, no remote sync)
 }
 
 export function resetState(){
@@ -55,15 +49,8 @@ export function resetState(){
   saveState(defaultState());
 }
 
-export const bc = (typeof BroadcastChannel !== 'undefined') ? new BroadcastChannel(CH) : null;
-
-
 export function subscribeStateUpdates(onUpdate){
-  // BroadcastChannel for same-origin tabs; storage event as fallback.
-  if(bc) bc.onmessage = (ev)=>{
-    if(ev?.data?.type === 'STATE_UPDATED') onUpdate?.(ev.data);
-  };
   window.addEventListener('storage', (e)=>{
-    if(e.key === KEY) onUpdate?.({type:'STATE_UPDATED', updatedAt: Date.now(), via:'storage'});
+    if(e.key === KEY) onUpdate?.({type:'STATE_UPDATED', updatedAt: Date.now()});
   });
 }

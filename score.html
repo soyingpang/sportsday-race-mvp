@@ -3,98 +3,28 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>計分員輸入</title>
+  <title>計分員（已停用）</title>
   <link rel="stylesheet" href="./assets/app.css" />
 </head>
 <body class="score">
   <header class="bar">
-    <div class="title" id="scoreTitle">計分員輸入（徑賽）</div>
+    <div class="title">計分員頁面（已停用）</div>
     <nav class="nav">
-      <a href="./index.html" target="_blank" rel="noopener">回管理端</a>
+      <a href="./index.html">回後台</a>
       <a href="./board.html" target="_blank" rel="noopener">看板</a>
     </nav>
   </header>
-  <div id="diag" class="msg" style="padding:0 16px"></div>
 
-  <!-- Lane mode (for iPad, e.g. score.html?lane=1) -->
-  <main id="laneMode" class="laneMode" hidden>
-    <section class="card laneCard">
-      <div class="row" style="justify-content:space-between;align-items:flex-end">
-        <div>
-          <div class="badge bigBadge" id="laneBadge">Lane</div>
-          <div class="muted" id="laneHeatLabel">—</div>
-        </div>
-        <div class="muted">📲 iPad 線道入分</div>
-      </div>
-
-      <div class="laneWho">
-        <div class="whoName" id="laneName">—</div>
-        <div class="whoMeta" id="laneMeta">—</div>
-      </div>
-
-      <div class="laneInputRow">
-        <input id="laneTime" inputmode="decimal" placeholder="秒數（例如 9.83）" class="laneTime" />
-        <button id="btnSendOk" class="primary laneSend">送出</button>
-      </div>
-
-      <div class="laneBtns">
-        <button class="laneStatus" data-status="DNS">DNS 未出賽</button>
-        <button class="laneStatus" data-status="DNF">DNF 未完賽</button>
-        <button class="laneStatus" data-status="DQ">DQ 取消資格</button>
-        <button class="laneStatus danger" data-status="CLEAR">清除</button>
-      </div>
-
-      <div class="msg" id="laneMsg"></div>
-
-      <details style="margin-top:10px">
-        <summary class="muted">設定</summary>
-        <label style="display:flex;gap:6px;align-items:center;margin-top:8px">
-          <input type="checkbox" id="autoFollow" checked />
-          自動跟隨後台目前組次
-        </label>
-      </details>
+  <main class="grid">
+    <section class="card span2">
+      <h2>本活動流程：計分員不需在系統入分</h2>
+      <p class="muted">
+        你們會把手寫分數表交回後台，由後台一次輸入三個遊戲時間，系統自動算 1/2 年級 Top10。
+      </p>
+      <p class="muted">
+        如日後要恢復 iPad 即時入分，可再把舊版 score.js 邏輯接回（但本次已先關閉）。
+      </p>
     </section>
   </main>
-
-  <!-- Full mode (desktop fallback) -->
-  <main id="fullMode" class="grid">
-    <section class="card span2">
-      <h2>1) 選擇要入分的組次</h2>
-      <div class="row">
-        <label>年級
-          <select id="selGrade">
-            <option value="1">一年級</option>
-            <option value="2">二年級</option>
-          </select>
-        </label>
-        <label>項目 <input id="inpEvent" value="60m" /></label>
-        <label>輪次
-          <select id="selRound">
-            <option value="預賽">預賽</option>
-            <option value="決賽">決賽</option>
-          </select>
-        </label>
-        <label style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="autoFollowFull" checked /> 自動跟隨看板目前組次</label>
-        <button id="btnFollowNow">跟隨目前組次</button>
-      </div>
-      <div class="row">
-        <label>組次
-          <select id="selHeat"></select>
-        </label>
-        <button id="btnLoadHeat" class="primary">載入此組</button>
-      </div>
-      <div id="pickMsg" class="msg"></div>
-    </section>
-
-    <section class="card span2">
-      <h2>2) Lane 1–4 成績輸入</h2>
-      <div id="heatInfo" class="muted"></div>
-      <div id="laneForm"></div>
-      <div class="msg" id="saveMsg"></div>
-    </section>
-  </main>
-
-  <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
-  <script type="module" src="./assets/score.js"></script>
 </body>
 </html>

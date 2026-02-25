@@ -1,27 +1,22 @@
-import { loadState, saveState, resetState, subscribeStateUpdates, onSave } from './store.js';
-import { exportTotalScoreSheet, exportHeatScoreSheet, exportAllHeatsHandwriteOneSheet } from './export.js';
-import { RemoteSync } from './remoteSync.js';
-import { parseCsv, gradeOfClass, laneAssign, makeHeatId } from './logic.js';
+import { loadState, saveState, resetState } from './store.js';
+import { exportScheduleCsv, exportTotalTimesCsv } from './export.js';
+import { parseCsv, gradeOfClass, laneAssign, makeHeatId, normalizeTimeInput, computeAllTotals } from './logic.js';
+
 let state = loadState();
 
 // === diagnostics ===
 const diagEl = document.getElementById('diag');
-function diag(text){
-  if(diagEl) diagEl.textContent = text || '';
-}
-window.addEventListener('error', (e)=>{
-  diag('⚠️ 系統錯誤：' + (e?.message || e));
-});
-window.addEventListener('unhandledrejection', (e)=>{
-  diag('⚠️ 系統錯誤：' + (e?.reason?.message || e?.reason || e));
-});
-diag('✅ 系統已載入（JS OK）');
+function diag(text){ if(diagEl) diagEl.textContent = text || ''; }
+window.addEventListener('error', (e)=>diag('⚠️ 系統錯誤：' + (e?.message || e)));
+window.addEventListener('unhandledrejection', (e)=>diag('⚠️ 系統錯誤：' + (e?.reason?.message || e?.reason || e)));
+diag('✅ 系統已載入（本機模式）');
 
-
+// === dom helpers ===
 const el = (id)=>document.getElementById(id);
 const fileCsv = el('fileCsv');
 const importMsg = el('importMsg');
 const participantsSummary = el('participantsSummary');
+
 const selGrade = el('selGrade');
 const selClassA = el('selClassA');
 const selClassB = el('selClassB');
@@ -31,69 +26,78 @@ const inpHeatNo = el('inpHeatNo');
 const pickA = el('pickA');
 const pickB = el('pickB');
 const selFill = el('selFill');
-const btnBuildHeats = el('btnBuildHeats');
-const buildMode = ()=> (document.querySelector('input[name="buildMode"]:checked')?.value || 'single');
+const chkAutoHeats = el('chkAutoHeats');
+const btnAutoHeats = el('btnAutoHeats');
 const createMsg = el('createMsg');
 const heatsList = el('heatsList');
-const cat1 = el('cat1');
-const cat2 = el('cat2');
-const cat3 = el('cat3');
-const btnExportTotal = el('btnExportTotal');
-const exportMsg = el('exportMsg');
-const btnExportHeatsOneSheet = el('btnExportHeatsOneSheet');
 const heatsOverview = el('heatsOverview');
 
-function setMsg(node, text){ node.textContent = text || ''; }
+const btnExportSchedule = el('btnExportSchedule');
+const exportMsg1 = el('exportMsg1');
 
-function syncCategoriesToUI(){
-  const cats = state.categories || {c1:'類別1',c2:'類別2',c3:'類別3'};
-  if(cat1) cat1.value = cats.c1 || '類別1';
-  if(cat2) cat2.value = cats.c2 || '類別2';
-  if(cat3) cat3.value = cats.c3 || '類別3';
-}
+const gLabel1 = el('gLabel1');
+const gLabel2 = el('gLabel2');
+const gLabel3 = el('gLabel3');
+const btnSaveLabels = el('btnSaveLabels');
+const labelMsg = el('labelMsg');
+const selGradeScore = el('selGradeScore');
+const scoreTable = el('scoreTable');
+const btnExportTotalCsv = el('btnExportTotalCsv');
+const exportMsg2 = el('exportMsg2');
 
-function saveCategoriesFromUI(){
-  if(!cat1 || !cat2 || !cat3) return;
-  state.categories = { c1: (cat1.value||'類別1').trim(), c2: (cat2.value||'類別2').trim(), c3: (cat3.value||'類別3').trim() };
-  saveState(state);
-}
-
-cat1?.addEventListener('change', saveCategoriesFromUI);
-cat2?.addEventListener('change', saveCategoriesFromUI);
-cat3?.addEventListener('change', saveCategoriesFromUI);
-
-btnExportTotal?.addEventListener('click', ()=>{
-  if(!state.participants?.length){
-    exportMsg.textContent = '請先匯入名單。';
-    return;
-  }
-  saveCategoriesFromUI();
-  try{
-    exportTotalScoreSheet(state);
-    exportMsg.textContent = '已匯出：總分表（單一工作表）';
-  }catch(e){
-    exportMsg.textContent = '匯出失敗：' + (e?.message || e);
-    throw e;
-  }
-});
-
-btnExportHeatsOneSheet?.addEventListener('click', ()=>{
-  if(!state.heats?.length){
-    exportMsg.textContent = '尚未建立任何場次。';
-    return;
-  }
-  try{
-    exportAllHeatsHandwriteOneSheet(state, {sheetName:'場次手寫計分表'});
-    exportMsg.textContent = '已匯出：場次手寫計分表（單一工作表）';
-  }catch(e){
-    exportMsg.textContent = '匯出失敗：' + (e?.message || e);
-    throw e;
-  }
-});
+function setMsg(node, text){ if(node) node.textContent = text || ''; }
 function byId(arr){ return Object.fromEntries(arr.map(x=>[x.id,x])); }
+function escapeHtml(s){
+  return String(s ?? '')
+    .replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;')
+    .replaceAll('"','&quot;').replaceAll("'",'&#39;');
+}
 
+// === reset ===
+el('btnReset')?.addEventListener('click', ()=>{
+  if(confirm('確定要清空此瀏覽器資料？')){
+    resetState();
+    state = loadState();
+    renderAll();
+  }
+});
+
+// === Import ===
+async function importCsvText(text){
+  const {records} = parseCsv(text);
+  if(!records.length){
+    setMsg(importMsg, '匯入失敗：沒有讀到資料列。');
+    return;
+  }
+  state.participants = records;
+  // backfill missing game records
+  state.games = state.games || {labels:['遊戲1','遊戲2','遊戲3'], times:{}};
+  state.games.times = state.games.times || {};
+  for(const p of records){
+    if(!state.games.times[p.id]) state.games.times[p.id] = {t1:null,t2:null,t3:null,note:''};
+  }
+  saveState(state);
+  setMsg(importMsg, `已匯入 ${records.length} 筆名單。`);
+  renderAll();
+}
+
+fileCsv?.addEventListener('change', async ()=>{
+  const f = fileCsv.files?.[0];
+  if(!f) return;
+  const text = await f.text();
+  importCsvText(text);
+});
+
+el('btnLoadSample')?.addEventListener('click', async ()=>{
+  // 本機模式仍可用：sample 跟著專案，需 http.server 開啟
+  const res = await fetch('./data/participants.sample.csv', {cache:'no-store'});
+  const text = await res.text();
+  importCsvText(text);
+});
+
+// === Schedule build ===
 function classesOfGrade(grade){
-  const set = new Set(state.participants
+  const set = new Set((state.participants||[])
     .filter(p=>gradeOfClass(p.class)===String(grade) && p.present)
     .map(p=>p.class));
   return Array.from(set).sort();
@@ -104,9 +108,7 @@ function renderClassOptions(){
   const classes = classesOfGrade(grade);
   selClassA.innerHTML = classes.map(c=>`<option value="${c}">${c}</option>`).join('');
   selClassB.innerHTML = classes.map(c=>`<option value="${c}">${c}</option>`).join('');
-  if(selClassB.value === selClassA.value && classes.length>1){
-    selClassB.value = classes[1];
-  }
+  if(selClassB.value === selClassA.value && classes.length>1) selClassB.value = classes[1];
   renderPickers();
 }
 
@@ -124,27 +126,25 @@ function renderPickers(){
   const classA = selClassA.value;
   const classB = selClassB.value;
 
-  const listA = state.participants.filter(p=>p.class===classA && p.present).sort((a,b)=>a.no-b.no);
-  const listB = state.participants.filter(p=>p.class===classB && p.present).sort((a,b)=>a.no-b.no);
+  const listA = (state.participants||[]).filter(p=>p.class===classA && p.present).sort((a,b)=>a.no-b.no);
+  const listB = (state.participants||[]).filter(p=>p.class===classB && p.present).sort((a,b)=>a.no-b.no);
 
   const mk = (p, grp)=>`
     <label>
       <input type="checkbox" data-grp="${grp}" value="${p.id}" />
-      <span>${p.no}. ${p.name}</span>
+      <span>${p.no}. ${escapeHtml(p.name)}</span>
     </label>`;
+
   pickA.innerHTML = (listA.length ? (renderBulkControls('A') + listA.map(p=>mk(p,'A')).join('')) : '<div class="muted">（無資料）</div>');
   pickB.innerHTML = (listB.length ? (renderBulkControls('B') + listB.map(p=>mk(p,'B')).join('')) : '<div class="muted">（無資料）</div>');
-  // 批次選取 + 勾選數提示（允許超過 2；建立組次時只取前 2 位）
+
   function updateCount(root, grp){
     const checked = root.querySelectorAll('input[type=checkbox]:checked').length;
     const node = root.querySelector(`[data-count="${grp}"]`);
-    if(node){
-      node.textContent = `已選 ${checked} 位（建立組次只取前2位）`;
-    }
+    if(node) node.textContent = `已選 ${checked} 位（建立場次只取前2位）`;
   }
 
   [pickA, pickB].forEach(root=>{
-    // bulk buttons
     root.addEventListener('click', e=>{
       const btn = e.target.closest('button[data-bulk]');
       if(!btn) return;
@@ -156,8 +156,6 @@ function renderPickers(){
       if(act === 'top2') boxes.forEach((b,i)=>b.checked = i < 2);
       updateCount(root, grp);
     });
-
-    // checkbox count
     root.addEventListener('change', e=>{
       const grp = e.target?.dataset?.grp;
       if(!grp) return;
@@ -170,7 +168,7 @@ function renderPickers(){
 }
 
 function renderParticipantsSummary(){
-  if(!state.participants.length){
+  if(!(state.participants||[]).length){
     participantsSummary.innerHTML = '<div class="muted">尚未匯入名單。</div>';
     return;
   }
@@ -188,29 +186,36 @@ function renderParticipantsSummary(){
 
 function renderHeatsOverview(pMap){
   if(!heatsOverview) return;
-  if(!state.heats.length){
+  if(!state.heats?.length){
     heatsOverview.innerHTML = '';
     return;
   }
-  const heats = state.heats.slice().sort((a,b)=>a.createdAt-b.createdAt);
-  const head = `
+  const heats = state.heats.slice().sort((a,b)=>
+    String(a.grade).localeCompare(String(b.grade)) ||
+    String(a.event).localeCompare(String(b.event),'zh-Hant') ||
+    String(a.round).localeCompare(String(b.round),'zh-Hant') ||
+    (a.heatNo||0)-(b.heatNo||0)
+  );
+
+  const laneCell = (L)=>{
+    const p = L?.pid ? pMap[L.pid] : null;
+    const n = p ? p.name : '（空）';
+    const c = p ? p.class : (L?.cls||'');
+    return `${escapeHtml(c)} ${escapeHtml(n)}`.trim();
+  };
+
+  heatsOverview.innerHTML = `
     <table class="table">
       <thead>
         <tr>
-          <th>看板</th>
-          <th>年級</th><th>項目</th><th>輪次</th><th>組次</th><th>A班</th><th>B班</th>
+          <th>目前</th>
+          <th>年級</th><th>項目</th><th>輪次</th><th>場次</th><th>A班</th><th>B班</th>
           <th>Lane1</th><th>Lane2</th><th>Lane3</th><th>Lane4</th>
         </tr>
       </thead>
       <tbody>
         ${heats.map(h=>{
           const isCurrent = state.ui.currentHeatId === h.id;
-          const laneCell = (L)=>{
-            const p = L.pid ? pMap[L.pid] : null;
-            const n = p ? p.name : '（空）';
-            const c = p ? p.class : (L.cls||'');
-            return `${escapeHtml(c)} ${escapeHtml(n)}`.trim();
-          };
           return `
             <tr>
               <td><button data-act="setCurrent" data-id="${h.id}">${isCurrent?'✅':'設為'}</button></td>
@@ -220,277 +225,249 @@ function renderHeatsOverview(pMap){
               <td>${h.heatNo}</td>
               <td>${escapeHtml(h.classA)}</td>
               <td>${escapeHtml(h.classB)}</td>
-              <td>${laneCell(h.lanes[0])}</td>
-              <td>${laneCell(h.lanes[1])}</td>
-              <td>${laneCell(h.lanes[2])}</td>
-              <td>${laneCell(h.lanes[3])}</td>
+              <td>${laneCell(h.lanes?.[0])}</td>
+              <td>${laneCell(h.lanes?.[1])}</td>
+              <td>${laneCell(h.lanes?.[2])}</td>
+              <td>${laneCell(h.lanes?.[3])}</td>
             </tr>`;
         }).join('')}
       </tbody>
     </table>
-    <div class="muted">提示：此表為「全部分組一次顯示」。點第一欄可快速切換看板目前組次。</div>
+    <div class="muted">提示：看板會用「目前場次」往後推算黎緊三隊。</div>
   `;
-  heatsOverview.innerHTML = head;
+
   heatsOverview.querySelectorAll('button[data-act="setCurrent"]').forEach(btn=>{
     btn.addEventListener('click', ()=>{
       state.ui.currentHeatId = btn.dataset.id;
       saveState(state);
       renderHeats();
+      setMsg(createMsg, '已設定目前場次（看板會更新黎緊三隊）。');
     });
   });
 }
 
 function renderHeats(){
-  if(!state.heats.length){
-    heatsList.innerHTML = '<div class="muted">尚未建立任何組次。</div>';
-    return;
-  }
-  const pMap = byId(state.participants);
+  const pMap = byId(state.participants||[]);
   renderHeatsOverview(pMap);
-  const rows = state.heats
-    .slice()
-    .sort((a,b)=>a.createdAt-b.createdAt)
-    .map(h=>{
-      const isCurrent = state.ui.currentHeatId === h.id;
-      const lanesHtml = `
-        <div class="lanes">
-          ${h.lanes.map(L=>{
-            const p = L.pid ? pMap[L.pid] : null;
-            const name = p ? p.name : '（空）';
-            const cls = p ? p.class : (L.cls || '');
-            return `
-              <div class="lane">
-                <div class="n">Lane ${L.lane}</div>
-                <div class="p">${escapeHtml(name)}</div>
-                <div class="c">${escapeHtml(cls)}</div>
-              </div>`;
-          }).join('')}
-        </div>`;
-      return `
-        <div class="card" style="margin-top:10px">
-          <div class="row" style="justify-content:space-between">
-            <div>
-              <span class="badge">${h.grade}年級</span>
-              <span class="badge">${escapeHtml(h.event)}</span>
-              <span class="badge">${escapeHtml(h.round)}</span>
-              <span class="badge">第 ${h.heatNo} 組</span>
-              ${h.locked ? '<span class="badge">已鎖定</span>' : ''}
-              ${isCurrent ? '<span class="badge">看板顯示中</span>' : ''}
-            </div>
-            <div class="row">
-              <button data-act="setCurrent" data-id="${h.id}">設為目前組次</button>
-              <button data-act="export" data-id="${h.id}">匯出計分表</button>
-              <button data-act="toggleLock" data-id="${h.id}">${h.locked?'解鎖':'鎖定'}</button>
-              <button data-act="reseed" data-id="${h.id}" ${h.locked?'disabled':''}>重排</button>
-              <button data-act="del" data-id="${h.id}" class="danger">刪除</button>
-            </div>
-          </div>
-          <div class="muted">A: ${escapeHtml(h.classA)}　B: ${escapeHtml(h.classB)}</div>
-          ${lanesHtml}
-        </div>`;
-    }).join('');
-  heatsList.innerHTML = rows;
 
-  heatsList.querySelectorAll('button[data-act]').forEach(btn=>{
-    btn.addEventListener('click', ()=>{
-      const act = btn.dataset.act;
-      const id = btn.dataset.id;
-      const idx = state.heats.findIndex(x=>x.id===id);
-      if(idx < 0) return;
-
-      if(act === 'setCurrent'){
-        state.ui.currentHeatId = id;
-        saveState(state);
-        renderHeats();
-        return;
-      }
-      if(act === 'export'){
-        exportHeatScoreSheet(state.heats[idx], state.participants);
-        return;
-      }
-      if(act === 'toggleLock'){
-        state.heats[idx].locked = !state.heats[idx].locked;
-        saveState(state);
-        renderHeats();
-        return;
-      }
-      if(act === 'reseed'){
-        const h = state.heats[idx];
-        if(h.locked) return;
-        // recompute based on stored picks
-        h.lanes = laneAssign({
-          classA: h.classA, classB: h.classB,
-          pickedA: h.pickedA, pickedB: h.pickedB,
-          fillStrategy: h.fillStrategy
-        });
-        saveState(state);
-        renderHeats();
-        return;
-      }
-      if(act === 'del'){
-        state.heats.splice(idx,1);
-        if(state.ui.currentHeatId === id) state.ui.currentHeatId = null;
-        saveState(state);
-        renderHeats();
-      }
-    });
-  });
-}
-
-function escapeHtml(s){
-  return String(s ?? '')
-    .replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;')
-    .replaceAll('"','&quot;').replaceAll("'",'&#39;');
-}
-
-// === Import ===
-async function importCsvText(text){
-  const {records} = parseCsv(text);
-  if(!records.length){
-    setMsg(importMsg, '匯入失敗：沒有讀到資料列。');
+  if(!state.heats?.length){
+    heatsList.innerHTML = '<div class="muted">尚未建立任何場次。</div>';
     return;
   }
-  // Basic validation: only accept known classes 1A/1B/2A/2B? We'll allow any, but grade filter applies.
-  state.participants = records;
-  saveState(state);
-  setMsg(importMsg, `已匯入 ${records.length} 筆名單。`);
-  renderAll();
+
+  // keep list minimal (delete / lock not needed for now)
+  heatsList.innerHTML = '<div class="muted">（此版本不提供鎖定/重排；若要恢復可再加回。）</div>';
 }
-
-fileCsv?.addEventListener('change', async ()=>{
-  const f = fileCsv.files?.[0];
-  if(!f) return;
-  const text = await f.text();
-  importCsvText(text);
-});
-
-document.getElementById('btnLoadSample')?.addEventListener('click', async ()=>{
-  const res = await fetch('./data/participants.sample.csv', {cache:'no-store'});
-  const text = await res.text();
-  importCsvText(text);
-});
-
-document.getElementById('btnReset')?.addEventListener('click', ()=>{
-  if(confirm('確定要清空此瀏覽器資料？')){
-    resetState();
-    state = loadState();
-    renderAll();
-  }
-});
-
-// === Create heat ===
-btnBuildHeats?.addEventListener('click', ()=>{
-  const mode = buildMode();
-  createHeats({all: mode==='all'});
-});
 
 function createHeats({all}){
   const grade = selGrade.value;
   const classA = selClassA.value;
   const classB = selClassB.value;
 
-  if(!state.participants.length){
-    setMsg(createMsg, '請先匯入名單。');
-    return;
+  if(!(state.participants||[]).length){
+    setMsg(createMsg, '請先匯入名單。'); return;
   }
-  if(!classA || !classB){
-    setMsg(createMsg, '請選擇兩個班級。');
-    return;
-  }
-  if(classA === classB){
-    setMsg(createMsg, 'A 班與 B 班不可相同。');
-    return;
-  }
-  // enforce grade separation
+  if(!classA || !classB){ setMsg(createMsg, '請選擇兩個班級。'); return; }
+  if(classA === classB){ setMsg(createMsg, 'A 班與 B 班不可相同。'); return; }
   if(gradeOfClass(classA) !== String(grade) || gradeOfClass(classB) !== String(grade)){
-    setMsg(createMsg, '年級不符合：1年級與2年級不可混賽。');
-    return;
+    setMsg(createMsg, '年級不符合：1年級與2年級不可混賽。'); return;
   }
 
   const pickedAAllRaw = Array.from(pickA.querySelectorAll('input[type=checkbox]:checked')).map(x=>x.value);
   const pickedBAllRaw = Array.from(pickB.querySelectorAll('input[type=checkbox]:checked')).map(x=>x.value);
 
   if(pickedAAllRaw.length + pickedBAllRaw.length === 0){
-    setMsg(createMsg, '請先用「全選 / 取前2位」或自行勾選名單。');
-    return;
+    setMsg(createMsg, '請先用「全選 / 取前2位」或自行勾選名單。'); return;
   }
 
-  // 依座號排序（確保「全選」後分組穩定）
   const pMap = byId(state.participants);
-  const sortByNo = (ids)=> ids
-    .filter(id=>pMap[id])
-    .slice()
-    .sort((a,b)=>{
-      const pa=pMap[a], pb=pMap[b];
-      return (pa.no - pb.no) || String(pa.name).localeCompare(String(pb.name), 'zh-Hant');
-    });
+  const sortByNo = (ids)=> ids.filter(id=>pMap[id]).slice().sort((a,b)=>{
+    const pa=pMap[a], pb=pMap[b];
+    return (pa.no - pb.no) || String(pa.name).localeCompare(String(pb.name), 'zh-Hant');
+  });
 
   const pickedAAll = sortByNo(pickedAAllRaw);
   const pickedBAll = sortByNo(pickedBAllRaw);
 
-  const event = (inpEvent.value || '60m').trim();
-  const round = selRound.value;
-  const startHeatNo = Number(inpHeatNo.value || 1);
+  const fillStrategy = selFill.value;
 
-  const chunk2 = (arr)=>{
-    const out=[];
-    for(let i=0;i<arr.length;i+=2) out.push(arr.slice(i,i+2));
-    return out.length ? out : [[]];
-  };
-
-  const chunksA = chunk2(pickedAAll);
-  const chunksB = chunk2(pickedBAll);
-
-  const total = all ? Math.max(chunksA.length, chunksB.length) : 1;
-
-  for(let i=0;i<total;i++){
-    const pickedA = (chunksA[i] || []).slice(0,2);
-    const pickedB = (chunksB[i] || []).slice(0,2);
-    const heatNo = startHeatNo + i;
-
-    const id = makeHeatId({grade, event, round, heatNo, classA, classB});
-    const lanes = laneAssign({classA, classB, pickedA, pickedB, fillStrategy: selFill.value});
-
-    state.heats.push({
-      id, grade: String(grade), event, round, heatNo,
+  const addHeat = (heatNo, pickedA, pickedB)=>{
+    const h = {
+      grade: String(grade),
+      event: String(inpEvent.value||'').trim() || '遊戲',
+      round: String(selRound.value||'').trim() || '預賽',
+      heatNo: Number(heatNo||1),
       classA, classB,
       pickedA, pickedB,
-      fillStrategy: selFill.value,
-      lanes,
-      locked: false,
-      createdAt: Date.now()
-    });
+      fillStrategy,
+    };
+    h.lanes = laneAssign({classA, classB, pickedA, pickedB, fillStrategy});
+    h.id = makeHeatId(h);
+    return h;
+  };
 
-    if(!state.ui.currentHeatId) state.ui.currentHeatId = id;
+  state.heats = state.heats || [];
+
+  if(!all){
+    const heatNo = Number(inpHeatNo.value || 1);
+    const h = addHeat(heatNo, pickedAAll.slice(0,2), pickedBAll.slice(0,2));
+    // upsert by id
+    const idx = state.heats.findIndex(x=>x.id===h.id);
+    if(idx>=0) state.heats[idx] = h; else state.heats.push(h);
+    state.ui.currentHeatId = h.id;
+    saveState(state);
+    setMsg(createMsg, `已建立：第 ${h.heatNo} 場（並設為目前場次）`);
+    renderHeats();
+    return;
   }
+
+  // Auto multiple heats: each heat consumes 2 per class
+  const totalHeats = Math.max(Math.ceil(pickedAAll.length/2), Math.ceil(pickedBAll.length/2));
+  const start = 1;
+  for(let i=0;i<totalHeats;i++){
+    const h = addHeat(start+i, pickedAAll.slice(i*2,i*2+2), pickedBAll.slice(i*2,i*2+2));
+    const idx = state.heats.findIndex(x=>x.id===h.id);
+    if(idx>=0) state.heats[idx] = h; else state.heats.push(h);
+  }
+  // set current to first of this context
+  const first = addHeat(start, pickedAAll.slice(0,2), pickedBAll.slice(0,2));
+  state.ui.currentHeatId = first.id;
 
   saveState(state);
-
-  if(all){
-    setMsg(createMsg, `已自動建立 ${total} 組：${grade}年級 ${event} ${round}（由已勾選名單分批每組每班 2 位）`);
-  }else{
-    setMsg(createMsg, `已建立：${grade}年級 ${event} ${round} 第${startHeatNo}組`);
-  }
+  setMsg(createMsg, `已自動建立 ${totalHeats} 場（並設為第 1 場為目前場次）`);
   renderHeats();
 }
 
-
-// === Sync ===
+el('btnCreateHeat')?.addEventListener('click', ()=>{
+  const autoAll = !!chkAutoHeats?.checked;
+  createHeats({all: autoAll});
+});
+btnAutoHeats?.addEventListener('click', ()=>createHeats({all:true}));
 
 selGrade?.addEventListener('change', renderClassOptions);
-selClassA?.addEventListener('change', renderPickers);
-selClassB?.addEventListener('change', renderPickers);
+selClassA?.addEventListener('change', ()=>{ if(selClassB.value===selClassA.value) renderClassOptions(); else renderPickers(); });
+selClassB?.addEventListener('change', ()=>{ if(selClassB.value===selClassA.value) renderClassOptions(); else renderPickers(); });
 
+// Export schedule
+btnExportSchedule?.addEventListener('click', ()=>{
+  if(!state.heats?.length){ setMsg(exportMsg1, '尚未建立任何賽程。'); return; }
+  exportScheduleCsv(state);
+  setMsg(exportMsg1, '已下載賽程表 CSV。');
+});
+
+// === Backend time entry (3 games) ===
+function syncLabelsToUI(){
+  const labels = state.games?.labels || ['遊戲1','遊戲2','遊戲3'];
+  if(gLabel1) gLabel1.value = labels[0] || '遊戲1';
+  if(gLabel2) gLabel2.value = labels[1] || '遊戲2';
+  if(gLabel3) gLabel3.value = labels[2] || '遊戲3';
+}
+
+function saveLabelsFromUI(){
+  const a = (gLabel1?.value || '遊戲1').trim() || '遊戲1';
+  const b = (gLabel2?.value || '遊戲2').trim() || '遊戲2';
+  const c = (gLabel3?.value || '遊戲3').trim() || '遊戲3';
+  state.games = state.games || {labels:[a,b,c], times:{}};
+  state.games.labels = [a,b,c];
+  saveState(state);
+  setMsg(labelMsg, '已儲存遊戲名稱。');
+  renderScoreTable();
+}
+
+btnSaveLabels?.addEventListener('click', saveLabelsFromUI);
+
+function ensureGameRec(pid){
+  state.games = state.games || {labels:['遊戲1','遊戲2','遊戲3'], times:{}};
+  state.games.times = state.games.times || {};
+  if(!state.games.times[pid]) state.games.times[pid] = {t1:null,t2:null,t3:null,note:''};
+  return state.games.times[pid];
+}
+
+function renderScoreTable(){
+  if(!scoreTable) return;
+  if(!(state.participants||[]).length){
+    scoreTable.innerHTML = '<div class="muted">請先匯入名單。</div>';
+    return;
+  }
+
+  const labels = state.games?.labels || ['遊戲1','遊戲2','遊戲3'];
+  const grade = String(selGradeScore?.value || '1');
+  const people = (state.participants||[]).filter(p=>p.present && gradeOfClass(p.class)===grade)
+    .slice()
+    .sort((a,b)=> String(a.class).localeCompare(String(b.class),'zh-Hant') || (a.no||0)-(b.no||0));
+
+  // build table
+  const rowsHtml = people.map(p=>{
+    const rec = ensureGameRec(p.id);
+    const t1 = (typeof rec.t1==='number') ? rec.t1 : '';
+    const t2 = (typeof rec.t2==='number') ? rec.t2 : '';
+    const t3 = (typeof rec.t3==='number') ? rec.t3 : '';
+    const complete = (t1!=='' && t2!=='' && t3!=='');
+    const total = complete ? (Number(t1)+Number(t2)+Number(t3)).toFixed(2) : '';
+    return `
+      <tr>
+        <td>${escapeHtml(p.class)}</td>
+        <td>${p.no||''}</td>
+        <td>${escapeHtml(p.name)}</td>
+        <td><input data-pid="${p.id}" data-k="t1" value="${t1}" inputmode="decimal" placeholder="秒" style="width:110px"></td>
+        <td><input data-pid="${p.id}" data-k="t2" value="${t2}" inputmode="decimal" placeholder="秒" style="width:110px"></td>
+        <td><input data-pid="${p.id}" data-k="t3" value="${t3}" inputmode="decimal" placeholder="秒" style="width:110px"></td>
+        <td class="mono">${escapeHtml(total)}</td>
+        <td><input data-pid="${p.id}" data-k="note" value="${escapeHtml(rec.note||'')}" placeholder="備註" style="width:180px"></td>
+      </tr>
+    `;
+  }).join('');
+
+  scoreTable.innerHTML = `
+    <table class="table">
+      <thead>
+        <tr>
+          <th>班別</th><th>座號</th><th>姓名</th>
+          <th>${escapeHtml(labels[0])}(秒)</th>
+          <th>${escapeHtml(labels[1])}(秒)</th>
+          <th>${escapeHtml(labels[2])}(秒)</th>
+          <th>總時間</th>
+          <th>備註</th>
+        </tr>
+      </thead>
+      <tbody>${rowsHtml}</tbody>
+    </table>
+  `;
+
+  // bind inputs (auto-save)
+  scoreTable.querySelectorAll('input[data-pid]').forEach(inp=>{
+    inp.addEventListener('change', ()=>{
+      const pid = inp.dataset.pid;
+      const k = inp.dataset.k;
+      const rec = ensureGameRec(pid);
+      if(k === 'note'){
+        rec.note = inp.value || '';
+      }else{
+        const t = normalizeTimeInput(inp.value);
+        rec[k] = t;
+        if(t === null) inp.value = ''; // normalize
+      }
+      saveState(state);
+      renderScoreTable(); // refresh totals
+    });
+  });
+}
+
+selGradeScore?.addEventListener('change', renderScoreTable);
+
+btnExportTotalCsv?.addEventListener('click', ()=>{
+  if(!(state.participants||[]).length){ setMsg(exportMsg2, '請先匯入名單。'); return; }
+  exportTotalTimesCsv(state);
+  setMsg(exportMsg2, '已下載計分總表 CSV。');
+});
+
+// === render all ===
 function renderAll(){
   renderParticipantsSummary();
   renderClassOptions();
   renderHeats();
+  syncLabelsToUI();
+  renderScoreTable();
 }
 
 renderAll();
-
-// === Remote cross-device sync (optional) ===
-(async ()=>{
-  await RemoteSync.init();
-  onSave((st)=>RemoteSync.push(st));
-})();

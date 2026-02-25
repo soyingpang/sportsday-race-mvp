@@ -1,117 +1,106 @@
-// SheetJS (XLSX) is loaded via CDN in HTML.
+import { gradeOfClass } from './logic.js';
 
-// Build a workbook with a single sheet from AOA.
-function aoaToBook(sheetName, rows, cols){
-  const ws = XLSX.utils.aoa_to_sheet(rows);
-  if(cols) ws['!cols'] = cols;
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, sheetName);
-  return {wb, ws};
+function escCsv(v){
+  const s = String(v ?? '');
+  if(/[",\n\r]/.test(s)) return `"${s.replaceAll('"','""')}"`;
+  return s;
 }
 
-export function exportTotalScoreSheet(state){
-  const cats = state.categories || {c1:'類別1',c2:'類別2',c3:'類別3'};
-  const people = (state.participants||[])
-    .filter(p=>p.present)
-    .slice()
-    .sort((a,b)=> String(a.class).localeCompare(String(b.class),'zh-Hant') || (a.no||0)-(b.no||0));
-
-  const rows = [
-    ['班別','座號','姓名', cats.c1 || '類別1', cats.c2 || '類別2', cats.c3 || '類別3', '備註']
-  ];
-
-  for(const p of people){
-    rows.push([p.class, p.no, p.name, '', '', '', '']);
-  }
-
-  const cols = [{wch:6},{wch:6},{wch:14},{wch:10},{wch:10},{wch:10},{wch:18}];
-  const {wb} = aoaToBook('總分表', rows, cols);
-  const ts = new Date().toISOString().slice(0,10).replaceAll('-','');
-  XLSX.writeFile(wb, `總分表_${ts}.xlsx`);
+function downloadText(filename, text, mime='text/csv'){
+  const blob = new Blob([text], {type: mime+';charset=utf-8'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); }, 200);
 }
 
-export function exportAllHeatsHandwriteOneSheet(state, {sheetName='場次手寫計分表'} = {}){
+export function exportScheduleCsv(state){
   const pMap = Object.fromEntries((state.participants||[]).map(p=>[p.id,p]));
   const heats = (state.heats||[]).slice().sort((a,b)=>
     String(a.grade).localeCompare(String(b.grade)) ||
-    String(a.event).localeCompare(String(b.event)) ||
-    String(a.round).localeCompare(String(b.round)) ||
+    String(a.event).localeCompare(String(b.event),'zh-Hant') ||
+    String(a.round).localeCompare(String(b.round),'zh-Hant') ||
     (a.heatNo||0)-(b.heatNo||0) ||
-    (a.createdAt||0)-(b.createdAt||0)
+    String(a.id).localeCompare(String(b.id))
   );
 
-  if(!heats.length){
-    alert('尚未建立任何組次。');
-    return;
+  const header = ['年級','項目','輪次','場次','A班','B班','Lane1','Lane2','Lane3','Lane4'];
+  const rows = [header];
+
+  const laneCell = (L)=>{
+    const p = L?.pid ? pMap[L.pid] : null;
+    const cls = p ? p.class : (L?.cls || '');
+    const name = p ? p.name : '（空）';
+    return `${cls} ${name}`.trim();
+  };
+
+  for(const h of heats){
+    rows.push([
+      h.grade, h.event, h.round, h.heatNo,
+      h.classA, h.classB,
+      laneCell(h.lanes?.[0]),
+      laneCell(h.lanes?.[1]),
+      laneCell(h.lanes?.[2]),
+      laneCell(h.lanes?.[3]),
+    ]);
   }
 
-  // One clean table (single sheet), sorted by heat then lane.
-  // Keep printable: insert a blank row between heats and add Excel row breaks.
-  const rows = [];
-  const rowBreaks = [];
-  const add = (r)=>rows.push(r);
+  const csv = rows.map(r=>r.map(escCsv).join(',')).join('\n');
+  const ts = new Date().toISOString().slice(0,10).replaceAll('-','');
+  downloadText(`賽程表_${ts}.csv`, csv);
+}
 
-  add(['年級','項目','輪次','組次','線道','班別','座號','姓名','成績(秒)','名次','備註']);
+export function exportTotalTimesCsv(state){
+  const labels = state.games?.labels || ['遊戲1','遊戲2','遊戲3'];
+  const times = state.games?.times || {};
+  const people = (state.participants||[]).filter(p=>p.present).slice().sort((a,b)=>
+    gradeOfClass(a.class).localeCompare(gradeOfClass(b.class)) ||
+    String(a.class).localeCompare(String(b.class),'zh-Hant') ||
+    (a.no||0)-(b.no||0)
+  );
 
-  for(let i=0;i<heats.length;i++){
-    const h = heats[i];
-    if(i>0){
-      // Page break before the next heat block, but keep format as one table.
-      rowBreaks.push({r: rows.length});
-      add([]); // spacer row for readability (still not "亂")
-    }
-    const lanes = (h.lanes||[]).slice().sort((a,b)=>(a.lane||0)-(b.lane||0));
-    for(const L of lanes){
-      const p = L.pid ? pMap[L.pid] : null;
-      const cls = p ? p.class : (L.cls || '');
-      const no = p ? (p.no ?? '') : '';
-      const name = p ? p.name : '（空）';
-      add([
-        `${h.grade}`,
-        h.event,
-        h.round,
-        `${h.heatNo}`,
-        `${L.lane}`,
-        cls,
-        no,
-        name,
-        '', // time (handwrite)
-        '', // rank (handwrite)
-        ''  // note
+  // Build per-grade ranking (complete only ranked)
+  const byGrade = { '1': [], '2': [] };
+  for(const p of people){
+    const g = gradeOfClass(p.class);
+    if(!byGrade[g]) continue;
+    const rec = times[p.id] || {};
+    const t1 = (typeof rec.t1 === 'number') ? rec.t1 : '';
+    const t2 = (typeof rec.t2 === 'number') ? rec.t2 : '';
+    const t3 = (typeof rec.t3 === 'number') ? rec.t3 : '';
+    const complete = (t1!=='' && t2!=='' && t3!=='');
+    const total = complete ? (Number(t1)+Number(t2)+Number(t3)) : '';
+    byGrade[g].push({p, t1,t2,t3,total, complete, note: rec.note||''});
+  }
+
+  const rows = [[
+    '年級','名次(同年級)','班別','座號','姓名',
+    `${labels[0]}(秒)`,`${labels[1]}(秒)`,`${labels[2]}(秒)`,
+    '總時間(秒)','備註'
+  ]];
+
+  for(const g of ['1','2']){
+    const arr = byGrade[g] || [];
+    arr.sort((a,b)=>{
+      if(a.complete !== b.complete) return a.complete ? -1 : 1;
+      if(a.total === '' && b.total !== '') return 1;
+      if(a.total !== '' && b.total === '') return -1;
+      if(a.total !== '' && b.total !== '' && a.total !== b.total) return a.total - b.total;
+      return String(a.p.class).localeCompare(String(b.p.class),'zh-Hant') || (a.p.no||0)-(b.p.no||0);
+    });
+    let rk=0;
+    for(const r of arr){
+      const rank = r.complete ? (++rk) : '';
+      rows.push([
+        g, rank, r.p.class, r.p.no, r.p.name,
+        r.t1, r.t2, r.t3, r.total, r.note
       ]);
     }
   }
 
-  const colWidths = [
-    {wch:6},{wch:10},{wch:8},{wch:6},{wch:6},
-    {wch:8},{wch:6},{wch:14},{wch:10},{wch:6},{wch:18}
-  ];
-
-  const {wb, ws} = aoaToBook(sheetName, rows, colWidths);
-
-  // Apply row breaks for printing (Excel honors in most cases)
-  ws['!rowBreaks'] = rowBreaks;
-
+  const csv = rows.map(r=>r.map(escCsv).join(',')).join('\n');
   const ts = new Date().toISOString().slice(0,10).replaceAll('-','');
-  XLSX.writeFile(wb, `場次手寫計分表_${ts}.xlsx`);
-}
-
-// (Optional) keep old single-heat export for future use.
-export function exportHeatScoreSheet(heat){
-  const rows = [
-    ['年級', heat.grade],
-    ['項目', heat.event],
-    ['輪次', heat.round],
-    ['組次', heat.heatNo],
-    [],
-    ['Lane','班級','姓名','成績(秒)','狀態(DNS/DNF/DQ)','名次','備註']
-  ];
-  for(const L of (heat.lanes||[])){
-    rows.push([L.lane, L.cls || '', '', '', '', '', '']);
-  }
-  const ws = XLSX.utils.aoa_to_sheet(rows);
-  ws['!cols'] = [{wch:6},{wch:8},{wch:14},{wch:10},{wch:16},{wch:8},{wch:18}];
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'ScoreSheet');
-  XLSX.writeFile(wb, `ScoreSheet_${heat.event}_H${heat.heatNo}.xlsx`);
+  downloadText(`計分總表_${ts}.csv`, csv);
 }

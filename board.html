@@ -3,12 +3,12 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>排行榜看板</title>
+  <title>看板（下一隊伍 + 年級 Top10）</title>
   <link rel="stylesheet" href="./assets/app.css" />
 </head>
 <body class="board cute">
   <header class="bar">
-    <div class="title">🏁 即時排行榜</div>
+    <div class="title">📣 看板（下一隊伍 + 年級 Top10）</div>
     <div class="muted" id="clock"></div>
   </header>
 
@@ -16,13 +16,35 @@
     <section class="card">
       <div class="row" style="justify-content:space-between;align-items:flex-end">
         <div>
-          <div id="lbTitle" class="lbTitle">—</div>
-          <div class="muted">Top 10（跨所有場次彙整）</div>
+          <div class="lbTitle">👥 黎緊三隊（請準備）</div>
+          <div class="muted">從「目前場次」往後推算（取 3 個不重複隊伍）</div>
         </div>
-        <div class="muted">✨ 1–2 年級親子運動日</div>
+        <div class="muted">✨ 親子遊戲日</div>
       </div>
-      <div id="leaderboard" class="lb"></div>
-      <div id="lbHint" class="muted" style="margin-top:10px"></div>
+      <div id="upcoming" class="lb"></div>
+      <div class="muted" id="upHint" style="margin-top:10px"></div>
+    </section>
+
+    <section class="card">
+      <div class="row" style="justify-content:space-between;align-items:flex-end">
+        <div>
+          <div id="g1Title" class="lbTitle">🏅 一年級 Top 10（3 遊戲總時間）</div>
+          <div class="muted">只用總時間排名，不再按單一遊戲分排名</div>
+        </div>
+      </div>
+      <div id="lbG1" class="lb"></div>
+      <div id="g1Hint" class="muted" style="margin-top:10px"></div>
+    </section>
+
+    <section class="card">
+      <div class="row" style="justify-content:space-between;align-items:flex-end">
+        <div>
+          <div id="g2Title" class="lbTitle">🏅 二年級 Top 10（3 遊戲總時間）</div>
+          <div class="muted">只用總時間排名，不再按單一遊戲分排名</div>
+        </div>
+      </div>
+      <div id="lbG2" class="lb"></div>
+      <div id="g2Hint" class="muted" style="margin-top:10px"></div>
     </section>
   </main>
 
